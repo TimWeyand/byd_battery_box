@@ -516,14 +516,17 @@ class BydBoxClient(ExtModbusClient):
 
         avg_cell_voltage = round(sum(all_cell_voltages) / len(all_cell_voltages) * 0.001, 3)
         avg_cell_temp = round(sum(all_cell_temps) / len(all_cell_temps),1)
+        # Compute actual per-update extremes by iterating through all_cell_voltages (values are in mV)
+        calc_max_c_v = round(max(all_cell_voltages) * 0.001, 3)
+        calc_min_c_v = round(min(all_cell_voltages) * 0.001, 3)
 
         warnings_list = self.bitmask_to_strings(warnings1, BMS_WARNINGS) + self.bitmask_to_strings(warnings2, BMS_WARNINGS) + self.bitmask_to_strings(warnings3, BMS_WARNINGS3)
         warnings = self.strings_to_string(strings=warnings_list, default='Normal', max_length=255)
 
         updated = datetime.now()
 
-        self.data[f'bms{bms_id}_max_c_v'] = max_voltage
-        self.data[f'bms{bms_id}_min_c_v'] = min_voltage
+        self.data[f'bms{bms_id}_max_c_v'] = calc_max_c_v
+        self.data[f'bms{bms_id}_min_c_v'] = calc_min_c_v
         self.data[f'bms{bms_id}_max_c_v_id'] = max_voltage_cell_module
         self.data[f'bms{bms_id}_min_c_v_id'] = min_voltage_cell_module
         self.data[f'bms{bms_id}_max_c_t'] = max_temp
@@ -545,20 +548,72 @@ class BydBoxClient(ExtModbusClient):
         self.data[f'bms{bms_id}_cell_balancing'] = cell_balancing
         self.data[f'bms{bms_id}_cell_voltages'] = cell_voltages
         self.data[f'bms{bms_id}_avg_c_v'] = avg_cell_voltage
-        # Update history of average cell voltage (max/min)
-        max_key = f'bms{bms_id}_max_history_avg_c_v'
-        min_key = f'bms{bms_id}_min_history_avg_c_v'
+        # Update history of cell voltage extremes (max/min of individual cells)
+        # Use the per-update extremes computed from all cells above.
+        max_key = f'bms{bms_id}_max_history_c_v'
+        min_key = f'bms{bms_id}_min_history_c_v'
         prev_max = self.data.get(max_key)
         prev_min = self.data.get(min_key)
         try:
-            if prev_max is None or avg_cell_voltage > prev_max:
-                self.data[max_key] = avg_cell_voltage
-            if prev_min is None or avg_cell_voltage < prev_min:
-                self.data[min_key] = avg_cell_voltage
+            if prev_max is None or calc_max_c_v > prev_max:
+                self.data[max_key] = calc_max_c_v
+            if prev_min is None or calc_min_c_v < prev_min:
+                self.data[min_key] = calc_min_c_v
         except Exception:
-            # In case previous values are not numeric, reset to current
-            self.data[max_key] = avg_cell_voltage
-            self.data[min_key] = avg_cell_voltage
+            # In case previous values are not numeric, reset to current per-update extremes
+            self.data[max_key] = calc_max_c_v
+            self.data[min_key] = calc_min_c_v
+
+        # Per-cell history (mV): maintain element-wise max/min for each cell across updates
+        max_hist_key = f'bms{bms_id}_cell_voltages_max_history'
+        min_hist_key = f'bms{bms_id}_cell_voltages_min_history'
+        prev_max_hist = self.data.get(max_hist_key)
+        prev_min_hist = self.data.get(min_hist_key)
+        def same_shape(a, b):
+            try:
+                if a is None or b is None:
+                    return False
+                if len(a) != len(b):
+                    return False
+                for i in range(len(a)):
+                    if a[i].get('m') != b[i].get('m'):
+                        return False
+                    va = a[i].get('v') or []
+                    vb = b[i].get('v') or []
+                    if len(va) != len(vb):
+                        return False
+                return True
+            except Exception:
+                return False
+        # initialize if first time or shape mismatch
+        if not same_shape(prev_max_hist, cell_voltages) or not same_shape(prev_min_hist, cell_voltages):
+            self.data[max_hist_key] = json.loads(json.dumps(cell_voltages))
+            self.data[min_hist_key] = json.loads(json.dumps(cell_voltages))
+        else:
+            # update histories element-wise
+            try:
+                new_max_hist = []
+                new_min_hist = []
+                for idx, mod in enumerate(cell_voltages):
+                    cur_vals = mod.get('v') or []
+                    pm = prev_max_hist[idx].get('v') or []
+                    pn = prev_min_hist[idx].get('v') or []
+                    max_vals = []
+                    min_vals = []
+                    for j in range(len(cur_vals)):
+                        v = cur_vals[j]
+                        max_prev = pm[j]
+                        min_prev = pn[j]
+                        max_vals.append(max(v, max_prev))
+                        min_vals.append(min(v, min_prev))
+                    new_max_hist.append({'m': mod.get('m'), 'v': max_vals})
+                    new_min_hist.append({'m': mod.get('m'), 'v': min_vals})
+                self.data[max_hist_key] = new_max_hist
+                self.data[min_hist_key] = new_min_hist
+            except Exception:
+                # fallback to reinit on any unexpected shape/value issues
+                self.data[max_hist_key] = json.loads(json.dumps(cell_voltages))
+                self.data[min_hist_key] = json.loads(json.dumps(cell_voltages))
 
         self.data[f'bms{bms_id}_cell_temps'] = cell_temps
         self.data[f'bms{bms_id}_avg_c_t'] = avg_cell_temp

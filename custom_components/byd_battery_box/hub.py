@@ -251,12 +251,13 @@ class Hub:
          else:
              ids = [unit_id]
          for bms_id in ids:
-             max_key = f'bms{bms_id}_max_history_avg_c_v'
-             min_key = f'bms{bms_id}_min_history_avg_c_v'
+             max_key = f'bms{bms_id}_max_history_c_v'
+             min_key = f'bms{bms_id}_min_history_c_v'
+             max_cells_key = f'bms{bms_id}_cell_voltages_max_history'
+             min_cells_key = f'bms{bms_id}_cell_voltages_min_history'
              # Remove keys to allow reinitialization at next update
-             if max_key in self.data:
-                 del self.data[max_key]
-             if min_key in self.data:
-                 del self.data[min_key]
+             for key in (max_key, min_key, max_cells_key, min_cells_key):
+                 if key in self.data:
+                    del self.data[key]
          _LOGGER.info(f"Reset history values for BMS ids: {ids}")
          self.update_entities()
