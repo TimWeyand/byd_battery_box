@@ -545,6 +545,20 @@ class BydBoxClient(ExtModbusClient):
         self.data[f'bms{bms_id}_cell_balancing'] = cell_balancing
         self.data[f'bms{bms_id}_cell_voltages'] = cell_voltages
         self.data[f'bms{bms_id}_avg_c_v'] = avg_cell_voltage
+        # Update history of average cell voltage (max/min)
+        max_key = f'bms{bms_id}_max_history_avg_c_v'
+        min_key = f'bms{bms_id}_min_history_avg_c_v'
+        prev_max = self.data.get(max_key)
+        prev_min = self.data.get(min_key)
+        try:
+            if prev_max is None or avg_cell_voltage > prev_max:
+                self.data[max_key] = avg_cell_voltage
+            if prev_min is None or avg_cell_voltage < prev_min:
+                self.data[min_key] = avg_cell_voltage
+        except Exception:
+            # In case previous values are not numeric, reset to current
+            self.data[max_key] = avg_cell_voltage
+            self.data[min_key] = avg_cell_voltage
 
         self.data[f'bms{bms_id}_cell_temps'] = cell_temps
         self.data[f'bms{bms_id}_avg_c_t'] = avg_cell_temp

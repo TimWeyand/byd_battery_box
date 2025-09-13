@@ -30,6 +30,7 @@ BMU_BUTTON_TYPES = {
     "update_log_history_500": ["Update last 500 log entries", "update_log_history_500", None, None, None, None, None],
     "update_log_history_1000": ["Update last 1000 log entries", "update_log_history_1000", None, None, None, None, None],
     "update_log_history_2000": ["Update last 2000 log entries", "update_log_history_2000", None, None, None, None, None],
+    "reset_history": ["Reset history values", "reset_history", None, None, None, "mdi:backup-restore", None],
 }
 
 BMU_SENSOR_TYPES = {
@@ -88,6 +89,8 @@ BMS_SENSOR_TYPES = {
     "warnings": ["Warnings", "warnings",None, None, None, None, EntityCategory.DIAGNOSTIC],
     "errors": ["Errors", "errors",None, None, None, None, EntityCategory.DIAGNOSTIC],
     "avg_c_v": ["Cells average voltage", "avg_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
+    "max_history_avg_c_v": ["Max history average voltage", "max_history_avg_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:chart-line", None],
+    "min_history_avg_c_v": ["Min history average voltage", "min_history_avg_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:chart-line", None],
     "avg_c_t": ["Cells average temperature", "avg_c_t", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:lightning-bolt", None],
     "updated": ["Updated", "updated",SensorDeviceClass.TIMESTAMP, None, None, None, EntityCategory.DIAGNOSTIC],
     "last_log": ["Last log", "last_log",None, None, None, None, EntityCategory.DIAGNOSTIC],

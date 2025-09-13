@@ -225,3 +225,27 @@ class Hub:
     def start_update_log_history(self, unit_id, log_depth):
          _LOGGER.info(f"Scheduled {DEVICE_TYPES[unit_id]} log update for up to {log_depth*20} log entries.")
          self._update_log_history_depth = [unit_id, log_depth]
+
+    def reset_history(self, unit_id: int | None = None):
+         """Reset history values for average cell voltage max/min.
+         unit_id: 0 for BMU (apply to all BMS), 1..n for specific BMS.
+         """
+         try:
+             towers = int(self.data.get('towers') or 0)
+         except Exception:
+             towers = 0
+         ids = []
+         if unit_id is None or unit_id == 0:
+             ids = list(range(1, towers + 1))
+         else:
+             ids = [unit_id]
+         for bms_id in ids:
+             max_key = f'bms{bms_id}_max_history_avg_c_v'
+             min_key = f'bms{bms_id}_min_history_avg_c_v'
+             # Remove keys to allow reinitialization at next update
+             if max_key in self.data:
+                 del self.data[max_key]
+             if min_key in self.data:
+                 del self.data[min_key]
+         _LOGGER.info(f"Reset history values for BMS ids: {ids}")
+         self.update_entities()
