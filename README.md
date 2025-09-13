@@ -23,7 +23,9 @@ This card is available in [HACS](https://hacs.xyz/) (Home Assistant Community St
 
 <small>*HACS is a third party community store and is not included in Home Assistant out of the box.*</small>
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=TimWeyand&repository=byd_battery_box&category=integration)
+[![Open your Home Assistant instance and open this repository in HACS (Integration).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=TimWeyand&repository=byd_battery_box&category=integration)
+
+[![Open your Home Assistant instance and open this repository in HACS (Plugin).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=TimWeyand&repository=byd_battery_box&category=plugin)
 
 ## Manual install
 
@@ -43,6 +45,21 @@ Use the buttons on the devices to retrieve additional log history, during the up
 
 
 # Usage
+
+> FAQ: Why isn’t the dashboard under custom_components?
+> The dashboard is a Lovelace frontend plugin (HACS category "plugin"). Frontend resources are JavaScript files, not Python integrations. Therefore it correctly lives under `byd_battery_box_dashboard/` and will be installed by HACS into `/www/community/byd_battery_box_dashboard/`.
+
+## Lovelace BYD Battery Box Dashboard card
+If you install the dashboard plugin via HACS, add the following resource in Settings → Dashboards → Resources:
+- url: /hacsfiles/byd_battery_box_dashboard/byd-battery-box-dashboard.js
+  type: module
+
+Then add a card:
+- type: custom:byd-battery-box-dashboard
+  entity: sensor.bms_1_cells_average_voltage
+  title: BYD Cells
+
+The card displays each module and its cells with min (red), current (green), and max (light gray) voltages for the last days (if attributes cell_voltages_min and cell_voltages_max are available from the integration).
 
 
 
