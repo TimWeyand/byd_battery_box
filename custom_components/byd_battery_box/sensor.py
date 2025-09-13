@@ -144,6 +144,16 @@ class BydBoxSensor(SensorEntity):
                 'cell_voltages_max_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_max_history'),
                 'cell_voltages_min_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_min_history'),
             }
+        elif 'max_history_c_v' in self._key:
+            return {
+                'cell_voltages_max_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_max_history'),
+                'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
+            }
+        elif 'min_history_c_v' in self._key:
+            return {
+                'cell_voltages_min_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_min_history'),
+                'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
+            }
         elif 'avg_c_t' in self._key:
             return {'cell_temps': self._hub.data.get(f'{self._key[:4]}_cell_temps')}
         elif 'log_entries' in self._key:
