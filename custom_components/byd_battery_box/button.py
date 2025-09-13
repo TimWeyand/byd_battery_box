@@ -93,14 +93,26 @@ class BydBoxButton(ButtonEntity):
     async def async_press(self) -> None:
         """Async: Handle button press"""
 
+        # Key patterns:
+        # - update_log_history_XXX
+        # - reset_history
         parts = self._key.split('_')
-        log_depth = int(float(parts[-1]) * 0.05)
         device = parts[0]
         if 'bms' in device:
             device_id = int(device[-1])
         else:
             device_id = 0
 
+        if self._key.endswith('reset_history'):
+            # Reset history values (all BMS when device_id==0)
+            self._hub.reset_history(device_id)
+            return
+
+        # default: update_log_history
+        try:
+            log_depth = int(float(parts[-1]) * 0.05)
+        except Exception:
+            log_depth = 0
         self._hub.start_update_log_history(device_id, log_depth)
 
     @property
