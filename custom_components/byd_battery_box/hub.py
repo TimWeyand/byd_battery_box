@@ -11,6 +11,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.core import HomeAssistant
 from importlib.metadata import version
+from packaging import version as pkg_version
 
 from .const import (
     DOMAIN,
@@ -23,7 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 class Hub:
     """Hub for BYD Battery Box Interface"""
 
-    PYMODBUS_VERSION = '3.11.1'
+    PYMODBUS_VERSION = '3.8.3'
 
     def __init__(self, hass: HomeAssistant, name: str, host: str, port: int, unit_id: int, scan_interval: int, scan_interval_bms: int = 600, scan_interval_log: int = 600) -> None:
         """Init hub."""
@@ -40,7 +41,7 @@ class Hub:
         self._scan_interval_bms = timedelta(seconds=scan_interval_bms)
         self._scan_interval_log = timedelta(seconds=scan_interval_log)
         self._bydclient = BydBoxClient(host=host, port=port, unit_id=unit_id, timeout=max(3, (scan_interval - 1)))
-        self.online = True     
+        self.online = True
         self._busy = False
         self._update_log_history_depth = [0,0]
 
@@ -49,7 +50,7 @@ class Hub:
     def data(self):
         return self._bydclient.data
 
-    @property 
+    @property
     def device_info_bmu(self) -> dict:
         return {
             "identifiers": {(DOMAIN, f'{self._name}_byd_bmu')},
@@ -69,7 +70,7 @@ class Hub:
             #"serial_number": self._bydclient.data.get('serial'),
             "sw_version": self._bydclient.data.get('bms_v'),
         }
-    
+
     @property
     def hub_id(self) -> str:
         """ID for hub."""
@@ -99,7 +100,7 @@ class Hub:
     def toggle_busy(func):
         async def wrapper(self, *args, **kwargs):
             if self._busy:
-                #_LOGGER.debug(f"skip {func.__name__} hub busy") 
+                #_LOGGER.debug(f"skip {func.__name__} hub busy")
                 return
             self._busy = True
             error = None
@@ -116,19 +117,29 @@ class Hub:
 
     @toggle_busy
     async def init_data(self, close = False):
-        await self._hass.async_add_executor_job(self.check_pymodbus_version)  
-        await self._hass.async_add_executor_job(self._bydclient.update_log_from_file)  
+        await self._hass.async_add_executor_job(self.check_pymodbus_version)
+        await self._hass.async_add_executor_job(self._bydclient.update_log_from_file)
         await self._bydclient.init_data(close = close)
         self.update_entities()
 
     def check_pymodbus_version(self):
-        if version('pymodbus') is None:
-            _LOGGER.warning(f"pymodbus not found")
-        elif version('pymodbus') < self.PYMODBUS_VERSION:
-            raise Exception(f"pymodbus {version('pymodbus')} found, please update to {self.PYMODBUS_VERSION} or higher")
-        elif version('pymodbus') > self.PYMODBUS_VERSION:
-            _LOGGER.warning(f"newer pymodbus {version('pymodbus')} found")
-        _LOGGER.debug(f"pymodbus {version('pymodbus')}")      
+        try:
+            current_version = version('pymodbus')
+            if current_version is None:
+                _LOGGER.warning(f"pymodbus not found")
+                return
+
+            current = pkg_version.parse(current_version)
+            required = pkg_version.parse(self.PYMODBUS_VERSION)
+
+            if current < required:
+                raise Exception(f"pymodbus {current_version} found, please update to {self.PYMODBUS_VERSION} or higher")
+            elif current > required:
+                _LOGGER.warning(f"newer pymodbus {current_version} found")
+            _LOGGER.debug(f"pymodbus {current_version}")
+        except Exception as e:
+            _LOGGER.error(f"Error checking pymodbus version: {e}")
+            raise
 
     @toggle_busy
     async def async_update_data(self, _now: Optional[int] = None) -> dict:
@@ -212,7 +223,7 @@ class Hub:
         """Disconnect client."""
         self._bydclient.close()
         _LOGGER.debug(f"close hub")
-    
+
     async def test_connection(self) -> bool:
         """Test connectivity"""
         _LOGGER.debug(f"test connection")
