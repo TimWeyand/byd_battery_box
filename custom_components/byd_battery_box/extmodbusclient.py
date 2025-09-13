@@ -81,26 +81,20 @@ class ExtModbusClient:
         """Read holding registers."""
         await self._check_and_reconnect()
 
-        # Detect API shape once
-        use_execute = hasattr(self._client, "execute")
-
+        # Try several API signatures without using request classes (for broad pymodbus compat)
         for attempt in range(retries+1):
             try:
-                if use_execute:
+                try:
+                    data = await self._client.read_holding_registers(address=address, count=count, unit=unit_id)
+                except TypeError:
                     try:
-                        from pymodbus.requests import ReadHoldingRegistersRequest
-                    except Exception:
-                        # Older module path
-                        from pymodbus.pdu import ReadHoldingRegistersRequest  # type: ignore
-                    req = ReadHoldingRegistersRequest(address, count, unit_id)
-                    data = await self._client.execute(req)
-                else:
-                    try:
-                        data = await self._client.read_holding_registers(address=address, count=count, unit=unit_id)
+                        data = await self._client.read_holding_registers(address=address, count=count, slave=unit_id)
                     except TypeError:
                         try:
-                            data = await self._client.read_holding_registers(address=address, count=count, slave=unit_id)
+                            # Some variants only take (address, count)
+                            data = await self._client.read_holding_registers(address, count)
                         except TypeError:
+                            # Final fallback: positional with unit
                             data = await self._client.read_holding_registers(address, count, unit_id)
             except ModbusIOException:
                 _LOGGER.error(f'error reading registers. IO error. connected: {self._client.connected} address: {address} count: {count} unit id: {self._unit_id}')
@@ -145,22 +139,18 @@ class ExtModbusClient:
         """Write registers."""
         await self._check_and_reconnect()
 
-        use_execute = hasattr(self._client, "execute")
         try:
-            if use_execute:
+            try:
+                result = await self._client.write_registers(address=address, values=payload, unit=unit_id)
+            except TypeError:
                 try:
-                    from pymodbus.requests import WriteMultipleRegistersRequest
-                except Exception:
-                    from pymodbus.pdu import WriteMultipleRegistersRequest  # type: ignore
-                req = WriteMultipleRegistersRequest(address, payload, unit_id)
-                result = await self._client.execute(req)
-            else:
-                try:
-                    result = await self._client.write_registers(address=address, values=payload, unit=unit_id)
+                    result = await self._client.write_registers(address=address, values=payload, slave=unit_id)
                 except TypeError:
                     try:
-                        result = await self._client.write_registers(address=address, values=payload, slave=unit_id)
+                        # Some variants accept only (address, values)
+                        result = await self._client.write_registers(address, payload)
                     except TypeError:
+                        # Final fallback: positional including unit
                         result = await self._client.write_registers(address, payload, unit_id)
         except ModbusIOException as e:
             raise Exception(f'write_registers: IO error {self._client.connected} {e.fcode} {e}')
