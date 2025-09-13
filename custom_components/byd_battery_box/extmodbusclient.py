@@ -84,7 +84,12 @@ class ExtModbusClient:
 
         for attempt in range(retries+1):
             try:
-                data = await self._client.read_holding_registers(address=address, count=count, slave=unit_id)
+                # pymodbus >=3.x uses 'unit' instead of 'slave'
+                try:
+                    data = await self._client.read_holding_registers(address=address, count=count, unit=unit_id)
+                except TypeError:
+                    # Fallback for older pymodbus versions that still use 'slave'
+                    data = await self._client.read_holding_registers(address=address, count=count, slave=unit_id)
             except ModbusIOException as e:
                 _LOGGER.error(f'error reading registers. IO error. connected: {self._client.connected} address: {address} count: {count} unit id: {self._unit_id}')
                 return None
@@ -130,7 +135,11 @@ class ExtModbusClient:
         await self._check_and_reconnect()
 
         try:
-            result = await self._client.write_registers(address=address, values=payload, slave=unit_id)
+            # pymodbus >=3.x uses 'unit' instead of 'slave'
+            try:
+                result = await self._client.write_registers(address=address, values=payload, unit=unit_id)
+            except TypeError:
+                result = await self._client.write_registers(address=address, values=payload, slave=unit_id)
         except ModbusIOException as e:
             raise Exception(f'write_registers: IO error {self._client.connected} {e.fcode} {e}')
         except ConnectionException as e:
