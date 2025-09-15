@@ -128,7 +128,6 @@ class Hub:
             if current_version is None:
                 _LOGGER.warning(f"pymodbus not found")
                 return
-
             current = pkg_version.parse(current_version)
             required = pkg_version.parse(self.PYMODBUS_VERSION)
 
@@ -237,27 +236,23 @@ class Hub:
          _LOGGER.info(f"Scheduled {DEVICE_TYPES[unit_id]} log update for up to {log_depth*20} log entries.")
          self._update_log_history_depth = [unit_id, log_depth]
 
-    def reset_history(self, unit_id: int | None = None):
-         """Reset history values for average cell voltage max/min.
-         unit_id: 0 for BMU (apply to all BMS), 1..n for specific BMS.
-         """
-         try:
-             towers = int(self.data.get('towers') or 0)
-         except Exception:
-             towers = 0
-         ids = []
-         if unit_id is None or unit_id == 0:
-             ids = list(range(1, towers + 1))
+    def reset_history_cell_voltage(self, unit_id:int):
+         """Reset stored per-cell min/max history for one BMS or all (unit_id=0)."""
+         if unit_id == 0:
+             ids = range(1, self._bydclient._bms_qty + 1)
          else:
              ids = [unit_id]
          for bms_id in ids:
-             max_key = f'bms{bms_id}_max_history_c_v'
-             min_key = f'bms{bms_id}_min_history_c_v'
-             max_cells_key = f'bms{bms_id}_cell_voltages_max_history'
-             min_cells_key = f'bms{bms_id}_cell_voltages_min_history'
-             # Remove keys to allow reinitialization at next update
-             for key in (max_key, min_key, max_cells_key, min_cells_key):
-                 if key in self.data:
-                    del self.data[key]
-         _LOGGER.info(f"Reset history values for BMS ids: {ids}")
+             for suffix in [
+                 '_max_history_cell_voltage',
+                 '_max_history_cell_voltage_cells',
+                 '_min_history_cell_voltage',
+                 '_min_history_cell_voltage_cells',
+             ]:
+                 key = f'bms{bms_id}{suffix}'
+                 if key in self._bydclient.data:
+                     try:
+                         del self._bydclient.data[key]
+                     except Exception:
+                         self._bydclient.data[key] = None
          self.update_entities()
