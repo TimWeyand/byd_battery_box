@@ -99,16 +99,15 @@ class BydBoxButton(ButtonEntity):
         parts = self._key.split('_')
         device = parts[0]
         if 'bms' in device:
-            device_id = int(device[-1])
+            device_id = int(device.replace('bms','').split('_')[0])
         else:
             device_id = 0
 
-        if self._key.endswith('reset_history'):
-            # Reset history values (all BMS when device_id==0)
-            self._hub.reset_history(device_id)
+        if self._key.endswith('reset_history_cell_voltage'):
+            self._hub.reset_history_cell_voltage(device_id)
             return
 
-        # default: update_log_history
+        # default: update log history buttons
         try:
             log_depth = int(float(parts[-1]) * 0.05)
         except Exception:

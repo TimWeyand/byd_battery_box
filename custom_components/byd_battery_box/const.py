@@ -30,7 +30,7 @@ BMU_BUTTON_TYPES = {
     "update_log_history_500": ["Update last 500 log entries", "update_log_history_500", None, None, None, None, None],
     "update_log_history_1000": ["Update last 1000 log entries", "update_log_history_1000", None, None, None, None, None],
     "update_log_history_2000": ["Update last 2000 log entries", "update_log_history_2000", None, None, None, None, None],
-    "reset_history": ["Reset history values", "reset_history", None, None, None, "mdi:backup-restore", None],
+    "reset_history_cell_voltage": ["Reset history cell voltage", "reset_history_cell_voltage", None, None, None, "mdi:restore-alert", None],
 }
 
 BMU_SENSOR_TYPES = {
@@ -92,6 +92,8 @@ BMS_SENSOR_TYPES = {
     "max_history_avg_c_v": ["Max history average voltage", "max_history_avg_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:chart-line", None],
     "min_history_avg_c_v": ["Min history average voltage", "min_history_avg_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:chart-line", None],
     "avg_c_t": ["Cells average temperature", "avg_c_t", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:lightning-bolt", None],
+    "max_history_cell_voltage": ["Max history cell voltage", "max_history_cell_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
+    "min_history_cell_voltage": ["Min history cell voltage", "min_history_cell_voltage", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
     "updated": ["Updated", "updated",SensorDeviceClass.TIMESTAMP, None, None, None, EntityCategory.DIAGNOSTIC],
     "last_log": ["Last log", "last_log",None, None, None, None, EntityCategory.DIAGNOSTIC],
     "b_total": ["Balancing total", "b_total",None, None, None, None, None],

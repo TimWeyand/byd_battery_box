@@ -13,6 +13,7 @@ from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import Entity
 from homeassistant.core import callback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import HubConfigEntry
 from .const import (
@@ -71,7 +72,7 @@ async def async_setup_entry(
     async_add_entities(entities)
     return True
 
-class BydBoxSensor(SensorEntity):
+class BydBoxSensor(SensorEntity, RestoreEntity):
     """Representation of an BYD Battery Box Modbus sensor."""
 
     def __init__(self, platform_name, hub, device_info, name, key, device_class, state_class, unit, icon, entity_category):
@@ -92,6 +93,25 @@ class BydBoxSensor(SensorEntity):
     async def async_added_to_hass(self):
         """Register callbacks."""
         self._hub.async_add_hub_entity(self._modbus_data_updated)
+        # Try to restore last state from HA history for history sensors
+        try:
+            last_state = await self.async_get_last_state()
+        except Exception:
+            last_state = None
+        if last_state and (
+            'max_history_cell_voltage' in self._key or 'min_history_cell_voltage' in self._key
+        ):
+            # Restore state value
+            try:
+                val = float(last_state.state)
+                self._hub.data[self._key] = val
+            except Exception:
+                pass
+            # Restore per-cell attribute if present
+            attrs = getattr(last_state, 'attributes', {}) or {}
+            cells = attrs.get('cell_voltages')
+            if cells is not None:
+                self._hub.data[f'{self._key}_cells'] = cells
 
     async def async_will_remove_from_hass(self) -> None:
         self._hub.async_remove_hub_entity(self._modbus_data_updated)
@@ -146,6 +166,8 @@ class BydBoxSensor(SensorEntity):
             return {'log': self._hub.data.get('log')}
         elif 'b_total' in self._key:
             return {'total_cells': self._hub.data.get(f'{self._key[:4]}_b_cells_total')}
+        elif 'max_history_cell_voltage' in self._key or 'min_history_cell_voltage' in self._key:
+            return {'cell_voltages': self._hub.data.get(f'{self._key}_cells')}
 
         return None
 

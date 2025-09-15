@@ -560,6 +560,47 @@ class BydBoxClient(ExtModbusClient):
             self.data[max_key] = avg_cell_voltage
             self.data[min_key] = avg_cell_voltage
 
+        # Update history of per-cell min/max voltages (based on current cell_voltages in mV)
+        # Initialize structures on first run to current values
+        def clone_cells(src):
+            return [{'m': item['m'], 'v': list(item['v'])} for item in src]
+
+        # Flatten helper to compute overall min/max state values in V
+        def flatten_values(cells):
+            vals = []
+            for item in cells:
+                vals.extend(item['v'])
+            return vals
+
+        max_hist_key_cells = f'bms{bms_id}_max_history_cell_voltage_cells'
+        min_hist_key_cells = f'bms{bms_id}_min_history_cell_voltage_cells'
+        max_hist_key = f'bms{bms_id}_max_history_cell_voltage'
+        min_hist_key = f'bms{bms_id}_min_history_cell_voltage'
+
+        if max_hist_key_cells not in self.data or not isinstance(self.data.get(max_hist_key_cells), list):
+            self.data[max_hist_key_cells] = clone_cells(cell_voltages)
+        if min_hist_key_cells not in self.data or not isinstance(self.data.get(min_hist_key_cells), list):
+            self.data[min_hist_key_cells] = clone_cells(cell_voltages)
+
+        # Update per-cell
+        for mi, module in enumerate(cell_voltages):
+            cur_vals = module['v']
+            max_vals = self.data[max_hist_key_cells][mi]['v']
+            min_vals = self.data[min_hist_key_cells][mi]['v']
+            for ci, mv in enumerate(cur_vals):
+                if mv > max_vals[ci]:
+                    max_vals[ci] = mv
+                if mv < min_vals[ci]:
+                    min_vals[ci] = mv
+
+        # Compute sensor state values (V)
+        max_mv = max(flatten_values(self.data[max_hist_key_cells])) if self.data[max_hist_key_cells] else None
+        min_mv = min(flatten_values(self.data[min_hist_key_cells])) if self.data[min_hist_key_cells] else None
+        if max_mv is not None:
+            self.data[max_hist_key] = round(max_mv * 0.001, 3)
+        if min_mv is not None:
+            self.data[min_hist_key] = round(min_mv * 0.001, 3)
+
         self.data[f'bms{bms_id}_cell_temps'] = cell_temps
         self.data[f'bms{bms_id}_avg_c_t'] = avg_cell_temp
 
