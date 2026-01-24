@@ -31,7 +31,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
 
     name = entry.data[CONF_NAME]
     host = entry.data[CONF_HOST]
-    name = entry.data[CONF_NAME]
     port = entry.data[CONF_PORT]
     unit_id = entry.data.get(CONF_UNIT_ID, 1)
     scan_interval = entry.data[CONF_SCAN_INTERVAL]
