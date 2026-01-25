@@ -402,18 +402,28 @@ class BydBoxClient(ExtModbusClient):
         """start reading status data"""
 
         await self.write_registers(unit_id=self._unit_id, address=0x0550, payload=[bms_id,0x8100])
- 
+
         response_reg = await self._wait_for_response(address = 0x0551)
         if not response_reg:
             return None
 
-        regs = []
-        for i in range(4):
-            new_regs = await self.get_registers(address=0x0558, count=65)
-            if new_regs is None:
-                _LOGGER.error(f"Failed reading BMS {bms_id} status part {i}", exc_info=True)
-                return False
-            else:
+        # Try optimized bulk read first - read all 260 registers at once if possible
+        regs = await self.get_registers(address=0x0558, count=260)
+        if regs is not None and len(regs) == 260:
+            # Bulk read succeeded
+            pass
+        else:
+            # Fallback to original 4-part read method
+            _LOGGER.debug(f"Bulk read failed for BMS {bms_id}, falling back to sequential reads")
+            regs = []
+            # Read 4 blocks of 65 registers each for BMS status data
+            ranges = [(0x0558, 65) for _ in range(4)]
+            bulk_results = await self.get_bulk_registers(ranges)
+
+            for i, new_regs in enumerate(bulk_results):
+                if new_regs is None:
+                    _LOGGER.error(f"Failed reading BMS {bms_id} status part {i}", exc_info=True)
+                    return False
                 regs += new_regs
 
         if not len(regs) == 260:
@@ -722,18 +732,32 @@ class BydBoxClient(ExtModbusClient):
         if not response_reg:
             return None
 
-        regs = []
-        for i in range(5):
-            new_regs = await self.get_registers(address=0x05A8, count=65)
-            if new_regs is None:
-                _LOGGER.error(f"Failed reading {self._get_device_name(unit_id)} log part: {i}", exc_info=True)
-                return None
-            else:
-                regs += new_regs[1:] # skip first byte 
+        # Try optimized bulk read for log data
+        log_regs = await self.get_registers(address=0x05A8, count=325)  # 5 * 65 = 325 registers
+        if log_regs is not None and len(log_regs) == 325:
+            # Skip first register from each 65-register block (5 total)
+            regs = []
+            for i in range(5):
+                start_idx = i * 65
+                regs += log_regs[start_idx + 1:start_idx + 65]  # Skip first byte of each block
+        else:
+            # Fallback to sequential reads
+            _LOGGER.debug(f"Bulk log read failed for {self._get_device_name(unit_id)}, using sequential reads")
+            regs = []
+            # Read 5 blocks of 65 registers each for log data
+            ranges = [(0x05A8, 65) for _ in range(5)]
+            bulk_results = await self.get_bulk_registers(ranges)
 
-        if len(regs) == 0 or not len(regs) == 320:
-            _LOGGER.error(f"Unexpected number of {self._get_device_name(unit_id)}  log regs: {len(regs)}")
-            return None    
+            for i, new_regs in enumerate(bulk_results):
+                if new_regs is None:
+                    _LOGGER.error(f"Failed reading {self._get_device_name(unit_id)} log part: {i}", exc_info=True)
+                    return None
+                else:
+                    regs += new_regs[1:] # skip first byte
+
+        if len(regs) == 0 or len(regs) != 320:
+            _LOGGER.error(f"Unexpected number of {self._get_device_name(unit_id)} log regs: {len(regs)}")
+            return None
         
         entries = 0
         ts:datetime = None

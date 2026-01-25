@@ -134,6 +134,24 @@ class ExtModbusClient:
 
         return None
 
+    async def get_bulk_registers(self, ranges):
+        """Read multiple register ranges efficiently.
+
+        Args:
+            ranges: List of tuples (start_address, count)
+
+        Returns:
+            List of register lists, one per range, or None for failed reads
+        """
+        results = []
+        for address, count in ranges:
+            regs = await self.get_registers(address, count)
+            results.append(regs)
+            # Small delay between bulk reads to avoid overwhelming device
+            if len(results) < len(ranges):
+                await asyncio.sleep(0.01)
+        return results
+
     async def write_registers(self, unit_id, address, payload):
         """Write registers."""
         # _LOGGER.debug(f"write registers a: {address} p: {payload}")
