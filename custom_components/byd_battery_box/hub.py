@@ -117,6 +117,8 @@ class Hub:
             await self._hass.async_add_executor_job(self.check_pymodbus_version)
             await self._hass.async_add_executor_job(self._bydclient.update_log_from_file)
             await self._bydclient.init_data(close = close)
+            # Start connection health monitoring
+            self._bydclient.health_monitor.start_monitoring()
             self.update_entities()
 
     def check_pymodbus_version(self):

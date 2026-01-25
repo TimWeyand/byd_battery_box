@@ -19,6 +19,7 @@ from . import HubConfigEntry
 from .const import (
     BMU_SENSOR_TYPES,
     BMS_SENSOR_TYPES,
+    CONNECTION_SENSOR_TYPES,
     ENTITY_PREFIX,
 )
 from .hub import Hub
@@ -38,6 +39,22 @@ async def async_setup_entry(
 
     for sensor_info in BMU_SENSOR_TYPES.values():
         sensor = BydBoxSensor(
+            platform_name = ENTITY_PREFIX,
+            hub = hub,
+            device_info = hub.device_info_bmu,
+            name = sensor_info[0],
+            key = sensor_info[1],
+            device_class = sensor_info[2],
+            state_class = sensor_info[3],
+            unit = sensor_info[4],
+            icon = sensor_info[5],
+            entity_category = sensor_info[6],
+        )
+        entities.append(sensor)
+
+    # Add connection health monitoring sensors
+    for sensor_info in CONNECTION_SENSOR_TYPES.values():
+        sensor = BydBoxConnectionSensor(
             platform_name = ENTITY_PREFIX,
             hub = hub,
             device_info = hub.device_info_bmu,
@@ -184,6 +201,71 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
             return {'cell_voltages': self._hub.data.get(f'{self._key}_cells')}
 
         return None
+
+    @property
+    def should_poll(self) -> bool:
+        """Data is delivered by the hub"""
+        return False
+
+    @property
+    def device_info(self) -> Optional[Dict[str, Any]]:
+        return self._device_info
+
+
+class BydBoxConnectionSensor(SensorEntity, RestoreEntity):
+    """Representation of a BYD Battery Box connection health sensor."""
+
+    def __init__(self, platform_name, hub, device_info, name, key, device_class, state_class, unit, icon, entity_category):
+        """Initialize the connection sensor."""
+        self._platform_name = platform_name
+        self._hub:Hub = hub
+        self._key = key
+        self._name = name
+        self._unit_of_measurement = unit
+        self._icon = icon
+        self._device_info = device_info
+        if not device_class is None:
+            self._attr_device_class = device_class
+        if not state_class is None:
+            self._attr_state_class = state_class
+        self._attr_entity_category = entity_category
+
+    async def async_added_to_hass(self):
+        """Register callbacks."""
+        self._hub.async_add_hub_entity(self._connection_data_updated)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._hub.async_remove_hub_entity(self._connection_data_updated)
+
+    @callback
+    def _connection_data_updated(self):
+        self.async_write_ha_state()
+
+    @property
+    def name(self):
+        """Return the name."""
+        return f"{self._name}"
+
+    @property
+    def unique_id(self) -> Optional[str]:
+        return f"{self._platform_name}_{self._key}"
+
+    @property
+    def unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return self._unit_of_measurement
+
+    @property
+    def icon(self):
+        """Return the sensor icon."""
+        return self._icon
+
+    @property
+    def state(self):
+        """Return the state of the connection sensor."""
+        # Get connection metrics from the client
+        metrics = self._hub._bydclient.get_connection_metrics()
+        return metrics.get(self._key)
 
     @property
     def should_poll(self) -> bool:
