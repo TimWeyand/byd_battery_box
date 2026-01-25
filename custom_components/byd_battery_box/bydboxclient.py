@@ -72,43 +72,39 @@ class BydBoxClient(ExtModbusClient):
         self._log_txt_path = self._log_path + 'byd.log'
         self._log_json_path = self._log_path + 'byd_log.json'
 
-    def toggle_busy(func):
-        async def wrapper(self, *args, **kwargs):
-            if self.busy:
-                _LOGGER.debug(f"skip {func.__name__} client busy") 
-                return False
-            self.busy = True
-            error = None
-            try:
-                result = await func(self, *args, **kwargs)
-            except Exception as e:
-                _LOGGER.warning(f'Exception in wrapper {e}')
-                error = e
-            self.busy = False
-            if not error is None:
-                raise error
-            return result
-        return wrapper
+    class ClientBusyLock:
+        """Async context manager for managing client busy state."""
 
-    @toggle_busy
+        def __init__(self, client):
+            self.client = client
+
+        async def __aenter__(self):
+            while self.client.busy:
+                await asyncio.sleep(0.1)
+            self.client.busy = True
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            self.client.busy = False
+
     async def init_data(self, close = False) -> bool:
+        async with self.ClientBusyLock(self):
+            if not self._client.connected: await self._client.connect()
 
-        if not self._client.connected: await self._client.connect() 
+            try:
+                await self.update_info_data()
+            except Exception as e:
+                raise Exception(f"Error reading base info unit id: {self._unit_id}")
 
-        try:
-            await self.update_info_data()
-        except Exception as e:
-            raise Exception(f"Error reading base info unit id: {self._unit_id}")
+            try:
+                await self.update_ext_info_data()
+            except Exception as e:
+                raise Exception(f"Error reading ext info unit id: {self._unit_id}")
 
-        try:
-            await self.update_ext_info_data()
-        except Exception as e:
-            raise Exception(f"Error reading ext info unit id: {self._unit_id}")
-
-        self.initialized = True
-        if close: self.close()
-        _LOGGER.debug(f"init done.")          
-        return True
+            self.initialized = True
+            if close: self.close()
+            _LOGGER.debug(f"init done.")
+            return True
 
     def update_log_from_file(self) -> bool:
         if not os.path.exists(self._log_path):
@@ -146,40 +142,40 @@ class BydBoxClient(ExtModbusClient):
         
         return False
 
-    @toggle_busy
     async def update_all_bms_status_data(self) -> bool:
-        for bms_id in range(1, self._bms_qty + 1):
-            if bms_id > 0:
-                await asyncio.sleep(.2)
-            try:
-                result = await self.update_bms_status_data(bms_id)
-            except Exception as e:
-                _LOGGER.error(f"Error reading BMS status data {bms_id}", exc_info=True)
-                return False
-            if not result:
-                #_LOGGER.debug(f"Failed updating data BMS status data {bms_id}", exc_info=True)
-                return False
-        return True   
+        async with self.ClientBusyLock(self):
+            for bms_id in range(1, self._bms_qty + 1):
+                if bms_id > 0:
+                    await asyncio.sleep(.2)
+                try:
+                    result = await self.update_bms_status_data(bms_id)
+                except Exception as e:
+                    _LOGGER.error(f"Error reading BMS status data {bms_id}", exc_info=True)
+                    return False
+                if not result:
+                    #_LOGGER.debug(f"Failed updating data BMS status data {bms_id}", exc_info=True)
+                    return False
+            return True
 
-    @toggle_busy
     async def update_all_log_data(self) -> bool:
-        result = False
-        self._new_logs = {}
-        for device_id in range(self._bms_qty + 1):
-            if device_id > 0:
-                await asyncio.sleep(.2)
-            try:
-                result = await self.update_log_data(device_id)
-            except Exception as e:
-                _LOGGER.error(f"Unknown error reading log {self._get_device_name(device_id)} data", exc_info=True)
-            if not result:
-                _LOGGER.debug(f'Failed update log {self._get_device_name(device_id)} data')
-                return False
+        async with self.ClientBusyLock(self):
+            result = False
+            self._new_logs = {}
+            for device_id in range(self._bms_qty + 1):
+                if device_id > 0:
+                    await asyncio.sleep(.2)
+                try:
+                    result = await self.update_log_data(device_id)
+                except Exception as e:
+                    _LOGGER.error(f"Unknown error reading log {self._get_device_name(device_id)} data", exc_info=True)
+                if not result:
+                    _LOGGER.debug(f'Failed update log {self._get_device_name(device_id)} data')
+                    return False
 
-        self.data[f'log'] = self.get_log_list(20)
-        self._update_balancing_cells_totals()
-        self.data['log_entries'] = len(self.log)    
-        return True
+            self.data[f'log'] = self.get_log_list(20)
+            self._update_balancing_cells_totals()
+            self.data['log_entries'] = len(self.log)
+            return True
 
     def _update_balancing_cells_totals(self) -> None:
         try:
@@ -352,55 +348,55 @@ class BydBoxClient(ExtModbusClient):
 
         return True
 
-    @toggle_busy
     async def update_bmu_status_data(self) -> bool:
         """start reading bmu status data"""
-        regs = await self.get_registers(address=0x0500, count=21) # 1280
-        if regs is None:
-            _LOGGER.warning('update_bmu_status_data regs is None')
-            return False
+        async with self.ClientBusyLock(self):
+            regs = await self.get_registers(address=0x0500, count=21) # 1280
+            if regs is None:
+                _LOGGER.warning('update_bmu_status_data regs is None')
+                return False
 
-        soc = self._client.convert_from_registers(regs[0:1], data_type = self._client.DATATYPE.UINT16)
-        max_cell_voltage = round(self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-        min_cell_voltage = round(self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-        soh = self._client.convert_from_registers(regs[3:4], data_type = self._client.DATATYPE.UINT16)
-        current = round(self._client.convert_from_registers(regs[4:5], data_type = self._client.DATATYPE.INT16) * 0.1,1)
-        bat_voltage = round(self._client.convert_from_registers(regs[5:6], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-        max_cell_temp = self._client.convert_from_registers(regs[6:7], data_type = self._client.DATATYPE.INT16)
-        min_cell_temp = self._client.convert_from_registers(regs[7:8], data_type = self._client.DATATYPE.INT16)
-        bmu_temp = self._client.convert_from_registers(regs[8:9], data_type = self._client.DATATYPE.INT16)
-        # 9-12 ?
-        if regs[9:13] != [0, 792, 0, 0]:
-            _LOGGER.debug(f'bmu status reg 9-12: {regs[9:13]} [0, 792, 0, 0]')
-        errors = self._client.convert_from_registers(regs[13:14], data_type = self._client.DATATYPE.UINT16)
-        param_t_v1, param_t_v2 = self.convert_from_registers_int8(regs[14:15]) 
-        output_voltage = round(self._client.convert_from_registers(regs[16:17], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
-        # TODO: change to use standard pymodbus function once HA has been upgraded to later version
-        charge_lfte = self.convert_from_registers(regs[17:19], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
-        discharge_lfte = self.convert_from_registers(regs[19:21], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
+            soc = self._client.convert_from_registers(regs[0:1], data_type = self._client.DATATYPE.UINT16)
+            max_cell_voltage = round(self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
+            min_cell_voltage = round(self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
+            soh = self._client.convert_from_registers(regs[3:4], data_type = self._client.DATATYPE.UINT16)
+            current = round(self._client.convert_from_registers(regs[4:5], data_type = self._client.DATATYPE.INT16) * 0.1,1)
+            bat_voltage = round(self._client.convert_from_registers(regs[5:6], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
+            max_cell_temp = self._client.convert_from_registers(regs[6:7], data_type = self._client.DATATYPE.INT16)
+            min_cell_temp = self._client.convert_from_registers(regs[7:8], data_type = self._client.DATATYPE.INT16)
+            bmu_temp = self._client.convert_from_registers(regs[8:9], data_type = self._client.DATATYPE.INT16)
+            # 9-12 ?
+            if regs[9:13] != [0, 792, 0, 0]:
+                _LOGGER.debug(f'bmu status reg 9-12: {regs[9:13]} [0, 792, 0, 0]')
+            errors = self._client.convert_from_registers(regs[13:14], data_type = self._client.DATATYPE.UINT16)
+            param_t_v1, param_t_v2 = self.convert_from_registers_int8(regs[14:15])
+            output_voltage = round(self._client.convert_from_registers(regs[16:17], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
+            # TODO: change to use standard pymodbus function once HA has been upgraded to later version
+            charge_lfte = self.convert_from_registers(regs[17:19], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
+            discharge_lfte = self.convert_from_registers(regs[19:21], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
 
-        param_t_v = f"{param_t_v1}.{param_t_v2}"
-        efficiency = round((discharge_lfte / charge_lfte) * 100.0,1)
+            param_t_v = f"{param_t_v1}.{param_t_v2}"
+            efficiency = round((discharge_lfte / charge_lfte) * 100.0,1)
 
-        self.data['soc'] = soc
-        self.data['max_cell_v'] = max_cell_voltage
-        self.data['min_cell_v'] = min_cell_voltage
-        self.data['soh'] = soh
-        self.data['current'] = current
-        self.data['bat_voltage'] = bat_voltage
-        self.data['max_cell_temp'] = max_cell_temp
-        self.data['min_cell_temp'] = min_cell_temp
-        self.data['bmu_temp'] = bmu_temp
-        self.data['errors'] =  self.bitmask_to_string(errors, BMU_ERRORS, 'Normal')    
-        self.data['param_t_v'] = param_t_v
-        self.data['output_voltage'] = output_voltage
-        self.data['power'] = current * output_voltage
-        self.data['charge_lfte'] = charge_lfte
-        self.data['discharge_lfte'] = discharge_lfte
-        self.data['efficiency'] = efficiency
-        self.data[f'updated'] = datetime.now()
+            self.data['soc'] = soc
+            self.data['max_cell_v'] = max_cell_voltage
+            self.data['min_cell_v'] = min_cell_voltage
+            self.data['soh'] = soh
+            self.data['current'] = current
+            self.data['bat_voltage'] = bat_voltage
+            self.data['max_cell_temp'] = max_cell_temp
+            self.data['min_cell_temp'] = min_cell_temp
+            self.data['bmu_temp'] = bmu_temp
+            self.data['errors'] =  self.bitmask_to_string(errors, BMU_ERRORS, 'Normal')
+            self.data['param_t_v'] = param_t_v
+            self.data['output_voltage'] = output_voltage
+            self.data['power'] = current * output_voltage
+            self.data['charge_lfte'] = charge_lfte
+            self.data['discharge_lfte'] = discharge_lfte
+            self.data['efficiency'] = efficiency
+            self.data[f'updated'] = datetime.now()
 
-        return True
+            return True
        
     async def update_bms_status_data(self, bms_id) -> bool:
         """start reading status data"""
