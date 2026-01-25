@@ -89,7 +89,7 @@ class BydBoxClient(ExtModbusClient):
             'avg_latency': round(self.health_monitor.avg_latency, 3) if self.health_monitor.avg_latency else None,
             'consecutive_failures': self.health_monitor.consecutive_failures,
             'last_success': self.health_monitor.last_success.isoformat() if self.health_monitor.last_success else None,
-            'health_status': health_status
+            'connection_health': 'healthy' if health_status else 'unhealthy'
         }
 
     class ClientBusyLock:
