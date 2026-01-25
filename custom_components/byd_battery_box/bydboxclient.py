@@ -10,6 +10,7 @@ import binascii
 import json
 import csv
 import os
+import time
 from .extmodbusclient import ExtModbusClient
 
 from .bydbox_const import (
@@ -72,6 +73,25 @@ class BydBoxClient(ExtModbusClient):
         self._log_txt_path = self._log_path + 'byd.log'
         self._log_json_path = self._log_path + 'byd_log.json'
 
+        # Initialize connection health monitor
+        self.health_monitor = self.ConnectionHealthMonitor(self)
+
+    def get_connection_metrics(self):
+        """Return current connection health data for HA sensor."""
+        # Note: This is called synchronously, so we return current state without running async health check
+        health_status = (self.health_monitor.last_success is not None and
+                        self.health_monitor.consecutive_failures < 3 and
+                        (self.health_monitor.last_latency is None or self.health_monitor.last_latency < 5.0))
+
+        return {
+            'connection_quality': round(self.health_monitor.connection_quality * 100, 1),
+            'last_latency': round(self.health_monitor.last_latency, 3) if self.health_monitor.last_latency else None,
+            'avg_latency': round(self.health_monitor.avg_latency, 3) if self.health_monitor.avg_latency else None,
+            'consecutive_failures': self.health_monitor.consecutive_failures,
+            'last_success': self.health_monitor.last_success.isoformat() if self.health_monitor.last_success else None,
+            'health_status': health_status
+        }
+
     class ClientBusyLock:
         """Async context manager for managing client busy state."""
 
@@ -86,6 +106,75 @@ class BydBoxClient(ExtModbusClient):
 
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             self.client.busy = False
+
+    class ConnectionHealthMonitor:
+        """Monitors connection health metrics and quality."""
+
+        def __init__(self, client, update_interval=60):
+            self.client = client
+            self.last_latency = None
+            self.avg_latency = None
+            self.connection_quality = 1.0  # 0.0 to 1.0
+            self.last_success = None
+            self.consecutive_failures = 0
+            self.update_interval = update_interval
+            self._monitor_task = None
+
+        async def measure_latency(self) -> Optional[float]:
+            start = time.perf_counter()
+            try:
+                # Quick, low-impact register read for measurement
+                result = await self.client.read_holding_registers(
+                    unit_id=self.client._unit_id,
+                    address=0x0000,  # Basic info register - low impact
+                    count=1
+                )
+                if result:
+                    latency = time.perf_counter() - start
+                    self.last_latency = latency
+
+                    # Update rolling average
+                    if self.avg_latency is None:
+                        self.avg_latency = latency
+                    else:
+                        self.avg_latency = (self.avg_latency * 0.8) + (latency * 0.2)
+
+                    # Calculate quality score (inverse relationship with latency)
+                    self.connection_quality = max(0.0, min(1.0, 2.0 / (1.0 + latency)))
+
+                    self.last_success = datetime.now()
+                    self.consecutive_failures = 0
+                    return latency
+            except Exception as e:
+                self.consecutive_failures += 1
+                _LOGGER.debug(f"Latency measurement failed: {e}")
+
+            return None
+
+        async def health_check(self) -> bool:
+            latency = await self.measure_latency()
+            # Consider healthy if latency < 5s and not too many consecutive failures
+            return (latency is not None and latency < 5.0 and
+                    self.consecutive_failures < 3)
+
+        async def periodic_health_update(self):
+            """Run health checks periodically"""
+            while True:
+                await self.measure_latency()
+                await asyncio.sleep(self.update_interval)
+
+        def start_monitoring(self):
+            """Start the background monitoring task"""
+            if self._monitor_task is None or self._monitor_task.done():
+                self._monitor_task = asyncio.create_task(self.periodic_health_update())
+                _LOGGER.debug("Connection health monitoring started")
+
+        def stop_monitoring(self):
+            """Stop the background monitoring task"""
+            if self._monitor_task:
+                self._monitor_task.cancel()
+                self._monitor_task = None
+                _LOGGER.debug("Connection health monitoring stopped")
 
     async def init_data(self, close = False) -> bool:
         async with self.ClientBusyLock(self):
