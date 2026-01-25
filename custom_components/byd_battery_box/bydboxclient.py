@@ -10,6 +10,7 @@ import binascii
 import json
 import csv
 import os
+import math
 from .extmodbusclient import ExtModbusClient
 
 from .bydbox_const import (
@@ -407,24 +408,26 @@ class BydBoxClient(ExtModbusClient):
         if not response_reg:
             return None
 
-        # Try optimized bulk read first - read all 260 registers at once if possible
-        regs = await self.get_registers(address=0x0558, count=260)
-        if regs is not None and len(regs) == 260:
-            # Bulk read succeeded
-            pass
-        else:
-            # Fallback to original 4-part read method
-            _LOGGER.debug(f"Bulk read failed for BMS {bms_id}, falling back to sequential reads")
-            regs = []
-            # Read 4 blocks of 65 registers each for BMS status data
-            ranges = [(0x0558, 65) for _ in range(4)]
-            bulk_results = await self.get_bulk_registers(ranges)
+        # Use chunked bulk read to comply with Modbus PDU limits (120 registers max per PDU)
+        regs = []
+        # Read 260 registers in chunks of 100 each (safe under 120 limit)
+        num_chunks = math.ceil(260 / 100)
+        ranges = []
+        for i in range(num_chunks):
+            chunk_addr = 0x0558 + i * 100
+            chunk_size = min(100, 260 - i * 100)
+            ranges.append((chunk_addr, chunk_size))
 
-            for i, new_regs in enumerate(bulk_results):
-                if new_regs is None:
-                    _LOGGER.error(f"Failed reading BMS {bms_id} status part {i}", exc_info=True)
-                    return False
-                regs += new_regs
+        bulk_results = await self.get_bulk_registers(ranges)
+        if bulk_results is None:
+            _LOGGER.error(f"Bulk read completely failed for BMS {bms_id}")
+            return False
+
+        for new_regs in bulk_results:
+            if new_regs is None:
+                _LOGGER.error(f"Failed reading BMS {bms_id} status chunk", exc_info=True)
+                return False
+            regs.extend(new_regs)
 
         if not len(regs) == 260:
             _LOGGER.error(f"unexpected number of BMS {bms_id} status regs: {len(regs)}")

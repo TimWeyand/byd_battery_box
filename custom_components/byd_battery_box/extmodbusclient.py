@@ -134,8 +134,8 @@ class ExtModbusClient:
 
         return None
 
-    async def get_bulk_registers(self, ranges):
-        """Read multiple register ranges efficiently.
+    async def get_bulk_registers(self, ranges, max_chunk_size=120):
+        """Read multiple register ranges efficiently with automatic chunking.
 
         Args:
             ranges: List of tuples (start_address, count)
@@ -145,11 +145,26 @@ class ExtModbusClient:
         """
         results = []
         for address, count in ranges:
-            regs = await self.get_registers(address, count)
-            results.append(regs)
+            # Split large ranges into chunks to comply with Modbus PDU limits
+            remaining = count
+            range_result = []
+            current_addr = address
+
+            while remaining > 0:
+                chunk_size = min(remaining, max_chunk_size)
+                regs = await self.get_registers(current_addr, chunk_size)
+                if regs is None:
+                    return None  # Fail entire range if any chunk fails
+
+                range_result.extend(regs)
+                remaining -= chunk_size
+                current_addr += chunk_size
+
+            results.append(range_result)
             # Small delay between bulk reads to avoid overwhelming device
             if len(results) < len(ranges):
                 await asyncio.sleep(0.01)
+
         return results
 
     async def write_registers(self, unit_id, address, payload):
