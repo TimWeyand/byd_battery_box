@@ -68,7 +68,7 @@ class BydBoxClient(ExtModbusClient):
 
         self.data['unit_id'] = unit_id
 
-        self._log_path = './custom_components/byd_battery_box/log/'
+        self._log_path = './custom_components/byd_battery_box/logs/'
         self._log_csv_path = self._log_path + 'byd_log.csv'
         self._log_txt_path = self._log_path + 'byd.log'
         self._log_json_path = self._log_path + 'byd_log.json'
