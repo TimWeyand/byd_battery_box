@@ -96,3 +96,12 @@ BMS_SENSOR_TYPES = {
     "last_log": ["Last log", "last_log",None, None, None, None, EntityCategory.DIAGNOSTIC],
     "b_total": ["Balancing total", "b_total",None, None, None, None, None],
 }
+
+# Connection Health Monitoring Diagnostic Sensors
+CONNECTION_SENSOR_TYPES = {
+    "connection_quality": ["Connection Quality", "connection_quality", None, SensorStateClass.MEASUREMENT, "%", "mdi:connection", EntityCategory.DIAGNOSTIC],
+    "last_latency": ["Last Latency", "last_latency", None, None, "ms", "mdi:timer", EntityCategory.DIAGNOSTIC],
+    "avg_latency": ["Average Latency", "avg_latency", None, None, "ms", "mdi:timer", EntityCategory.DIAGNOSTIC],
+    "consecutive_failures": ["Consecutive Failures", "consecutive_failures", None, SensorStateClass.MEASUREMENT, None, "mdi:alert-circle", EntityCategory.DIAGNOSTIC],
+    "connection_health": ["Connection Health", "connection_health", None, None, None, "mdi:check-circle", EntityCategory.DIAGNOSTIC],
+}
