@@ -1,0 +1,225 @@
+name: CI & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Code Quality Checks (blocking) ───────────────────────────
+
+  lint:
+    name: Ruff Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff check
+        run: ruff check custom_components/
+
+  syntax-check:
+    name: Python Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile all Python files
+        run: python -m py_compile custom_components/byd_battery_box/*.py
+
+  # ─── Integration Metadata Checks (blocking) ───────────────────
+
+  hacs-validation:
+    name: HACS Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    name: Hassfest Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  # ─── Type Check (informational, non-blocking) ─────────────────
+
+  type-check:
+    name: MyPy Type Check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install mypy
+        run: pip install mypy
+      - name: Run mypy
+        run: mypy custom_components/ || true
+
+  # ─── Security Scan (informational, non-blocking) ────────────────
+
+  security-scan:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install bandit
+        run: pip install bandit
+      - name: Run bandit
+        run: bandit -r custom_components/ -f json -o bandit-report.json || true
+      - name: Show results
+        if: always()
+        run: bandit -r custom_components/ -ll || true
+
+  # ─── Version Bump & Release (only on main, after all checks pass) ──
+
+  release:
+    name: Version Bump & Release
+    needs: [lint, syntax-check, hacs-validation, hassfest]
+    # Only run on push to main, never on PRs
+    # Skip if this commit was already a version bump (recursion guard)
+    if: >-
+      github.event_name == 'push' &&
+      !contains(github.event.head_commit.message, '[skip-version]') &&
+      !contains(github.event.head_commit.message, 'chore: bump version')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if version was already bumped
+        id: check
+        run: |
+          # Read current version
+          CURRENT_VERSION=$(python3 -c "
+          import json
+          with open('custom_components/byd_battery_box/manifest.json') as f:
+              print(json.load(f)['version'])
+          ")
+
+          # Calculate what the new version would be
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+
+          # Check if tag for the NEW version already exists
+          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag v$NEW_VERSION already exists - skipping release"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if tag for the CURRENT version already exists on this exact commit
+          CURRENT_TAG="v$CURRENT_VERSION"
+          if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1; then
+            TAG_COMMIT=$(git rev-list -n 1 "$CURRENT_TAG")
+            if [ "$TAG_COMMIT" = "${{ github.sha }}" ]; then
+              echo "Current commit already tagged as $CURRENT_TAG - skipping release"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Last tag: ${LAST_TAG:-none (first release)}"
+
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges | grep -v "chore: bump version" | head -50)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges "${LAST_TAG}..HEAD" | grep -v "chore: bump version" | head -50)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- Maintenance release"
+          fi
+
+          # Write changelog to file (avoids multiline env var issues)
+          {
+            echo "## Changes"
+            echo ""
+            echo "$COMMITS"
+            echo ""
+            echo "---"
+            echo "*Automatically released after CI passed on \`main\` branch.*"
+          } > /tmp/release_notes.md
+
+          echo "--- Release Notes ---"
+          cat /tmp/release_notes.md
+
+      - name: Bump patch version
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          NEW_VERSION="${{ steps.check.outputs.new_version }}"
+          CURRENT_VERSION="${{ steps.check.outputs.current_version }}"
+
+          echo "Bumping $CURRENT_VERSION -> $NEW_VERSION"
+
+          # Update manifest.json
+          python3 -c "
+          import json
+          with open('custom_components/byd_battery_box/manifest.json', 'r') as f:
+              data = json.load(f)
+          data['version'] = '$NEW_VERSION'
+          with open('custom_components/byd_battery_box/manifest.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          "
+
+          # Update pyproject.toml
+          sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" pyproject.toml
+
+          # Update CLAUDE.md (only the version string in the overview section)
+          sed -i "s/$CURRENT_VERSION/$NEW_VERSION/g" CLAUDE.md
+
+      - name: Commit, tag, and push
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          NEW_VERSION="${{ steps.check.outputs.new_version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add custom_components/byd_battery_box/manifest.json pyproject.toml CLAUDE.md
+          git diff --staged --quiet && { echo "No changes to commit"; exit 0; }
+
+          git commit -m "chore: bump version to $NEW_VERSION [skip-version]"
+          git tag "v$NEW_VERSION"
+          git push
+          git push --tags
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ steps.check.outputs.new_version }}"
+          gh release create "v$NEW_VERSION" \
+            --title "v$NEW_VERSION" \
+            --notes-file /tmp/release_notes.md

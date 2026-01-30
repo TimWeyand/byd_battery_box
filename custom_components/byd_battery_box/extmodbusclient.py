@@ -2,12 +2,11 @@
 
 """Extended Modbus Class"""
 
+import asyncio
 import logging
 import operator
-import threading
-from typing import Literal
 import struct
-import asyncio
+from typing import Literal
 
 from pymodbus.client import AsyncModbusTcpClient
 
@@ -17,10 +16,10 @@ try:
 except ImportError:
     # For older pymodbus versions (3.8.x and below)
     from pymodbus.utilities import unpack_bitstring
-from pymodbus.exceptions import ModbusIOException, ConnectionException
-from pymodbus import ExceptionResponse
 # from  pymodbus.register_write_message import WriteMultipleRegistersResponse
-from importlib.metadata import version
+
+from pymodbus import ExceptionResponse
+from pymodbus.exceptions import ConnectionException, ModbusIOException
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,23 +84,24 @@ class ExtModbusClient:
         # _LOGGER.debug(f"read registers a: {address} s: {unit_id} c {count} {self._client.connected}")
         await self._check_and_reconnect()
 
+        data = None
         for attempt in range(retries + 1):
             try:
                 data = await self._client.read_holding_registers(address=address, count=count, device_id=unit_id)
-            except ModbusIOException as e:
-                _LOGGER.error(
-                    f'error reading registers. IO error. connected: {self._client.connected} address: {address} count: {count} unit id: {self._unit_id}')
-                return None
-            except ConnectionException as e:
-                _LOGGER.error(
-                    f'error reading registers. connection exception connected: {self._client.connected} address: {address} count: {count} unit id: {self._unit_id} {e} ')
+            except (ModbusIOException, ConnectionException) as e:
+                _LOGGER.warning(
+                    f'error reading registers attempt {attempt + 1}/{retries + 1}: {type(e).__name__} connected: {self._client.connected} address: {address} count: {count} unit id: {self._unit_id} {e}')
+                if attempt < retries:
+                    await asyncio.sleep(.2)
+                    await self._check_and_reconnect()
+                    continue
                 return None
             except Exception as e:
                 _LOGGER.error(
                     f'error reading registers. unknown error. connected {self._client.connected} address: {address} count: {count} unit id: {self._unit_id} type {type(e)} error {e} ')
                 return None
 
-            if not data.isError():
+            if data is not None and not data.isError():
                 break
             else:
                 if isinstance(data, ModbusIOException):
@@ -117,7 +117,7 @@ class ExtModbusClient:
 
         if data is None or data.isError():
             _LOGGER.error(
-                f"error reading registers. retries: {attempt}/{retries} connected {self._client.connected} register: {address} count: {count} unit id: {self._unit_id} retries {retries} error: {data} ")
+                f"error reading registers. retries exhausted. connected {self._client.connected} register: {address} count: {count} unit id: {self._unit_id} retries {retries} error: {data} ")
             return None
 
         return data
@@ -125,11 +125,11 @@ class ExtModbusClient:
     async def get_registers(self, address, count):
         data = await self.read_holding_registers(unit_id=self._unit_id, address=address, count=count)
 
-        if not data is None and len(data.registers) > 0:
+        if data is not None and len(data.registers) > 0:
             return data.registers
 
         # some error happened return None
-        if not data is None and len(data.registers) == 0:
+        if data is not None and len(data.registers) == 0:
             _LOGGER.warning(f'registers are empty address: {address} count: {count} unit id: {self._unit_id}')
 
         return None
@@ -215,7 +215,7 @@ class ExtModbusClient:
 
     def get_value_from_dict(self, d, k, default='NA'):
         v = d.get(k)
-        if not v is None:
+        if v is not None:
             return v
         return f'{default}'
 
@@ -225,7 +225,7 @@ class ExtModbusClient:
                 result = byteArray[pos] * 256 + byteArray[pos + 1]
             else:
                 result = byteArray[pos + 1] * 256 + byteArray[pos]
-        except:
+        except (IndexError, TypeError):
             return 0
         return result
 
@@ -237,7 +237,7 @@ class ExtModbusClient:
                 result = byteArray[pos + 1] * 256 + byteArray[pos]
             if (result > 32768):
                 result -= 65536
-        except:
+        except (IndexError, TypeError):
             return 0
         return result
 

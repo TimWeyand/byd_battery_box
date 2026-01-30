@@ -1,27 +1,27 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 import voluptuous as vol
-import asyncio
 from homeassistant import config_entries, exceptions
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 
-from .hub import Hub
-from homeassistant.const import CONF_NAME, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from .const import (
-    DOMAIN,
-    DEFAULT_NAME,
-    DEFAULT_SCAN_INTERVAL,
-    DEFAULT_PORT,
-    DEFAULT_UNIT_ID,
+    CONF_BMS_SCAN_INTERVAL,
+    CONF_LOG_SCAN_INTERVAL,
     CONF_UNIT_ID,
     DEFAULT_BMS_SCAN_INTERVAL,
-    CONF_BMS_SCAN_INTERVAL,
     DEFAULT_LOG_SCAN_INTERVAL,
-    CONF_LOG_SCAN_INTERVAL,
+    DEFAULT_NAME,
+    DEFAULT_PORT,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_UNIT_ID,
+    DOMAIN,
 )
+from .hub import Hub
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
 
     if len(data[CONF_HOST]) < 3:
         raise InvalidHost
-    if data[CONF_PORT] > 65535:
+    if not (1 <= data[CONF_PORT] <= 65535):
         raise InvalidPort
     if data[CONF_SCAN_INTERVAL] < 10:
         raise ScanIntervalTooShort
@@ -121,14 +121,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except LogScanIntervalTooShort:
                 errors["base"] = "log_scan_interval_too_short"
             except InvalidPort:
-                errors["base"] = "bms_scan_interval_too_short"
-            except BmsScanIntervalTooShort:
-                errors["port"] = "invalid_port"
-                # The error string is set here, and should be translated.
-                # This example does not currently cover translations, see the
-                # comments on `DATA_SCHEMA` for further details.
-                # Set the error on the `host` field, not the entire form.
-                errors["host"] = "invalid_host"
+                errors["base"] = "invalid_port"
+            except InvalidHost:
+                errors["base"] = "invalid_host"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"

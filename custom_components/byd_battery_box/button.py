@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 from homeassistant.components.button import ButtonEntity
-from homeassistant.const import CONF_NAME #, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import Entity
 
 from . import HubConfigEntry
 from .const import (
@@ -46,7 +44,7 @@ async def async_setup_entry(
         entities.append(button)
 
     towers = hub.data.get('towers')
-    if not towers is None and towers > 0:
+    if towers is not None and towers > 0:
         for id in range(1,towers +1):
             for info in BMU_BUTTON_TYPES.values():
                 sensor = BydBoxButton(
@@ -79,7 +77,7 @@ class BydBoxButton(ButtonEntity):
 #        self._unit_of_measurement = unit
         self._icon = icon
         self._device_info = device_info
-        if not device_class is None:
+        if device_class is not None:
             self._attr_device_class = device_class
 #        if not state_class is None:
 #            self._attr_state_class = state_class
@@ -120,9 +118,9 @@ class BydBoxButton(ButtonEntity):
         return f"{self._name}"
 
     @property
-    def unique_id(self) -> Optional[str]:
+    def unique_id(self) -> str | None:
         return f"{self._platform_name}_{self._key}"
 
     @property
-    def device_info(self) -> Optional[Dict[str, Any]]:
+    def device_info(self) -> dict[str, Any] | None:
         return self._device_info

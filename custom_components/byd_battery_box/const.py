@@ -22,7 +22,7 @@ DEVICE_TYPES = {
     0: "BMU",
     1: "BMS 1",
     2: "BMS 2",
-    3: "BMS 3",    
+    3: "BMS 3",
 }
 
 BMU_BUTTON_TYPES = {

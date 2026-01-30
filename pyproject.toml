@@ -1,0 +1,50 @@
+[project]
+name = "byd_battery_box"
+version = "0.1.28"
+description = "Home Assistant Custom Component for BYD Battery Box"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 200
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (syntax errors, undefined names, unused imports)
+    "W",    # pycodestyle warnings
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (modern Python syntax)
+    "B",    # flake8-bugbear (common bugs)
+    "SIM",  # flake8-simplify
+    "T20",  # flake8-print (no print statements)
+]
+ignore = [
+    "E501",   # line too long (handled by line-length setting)
+    "W191",   # indentation contains tabs (mixed in bydbox_const.py)
+    "E101",   # indentation contains mixed spaces and tabs
+    "B010",   # do not call setattr with a constant attribute value
+    "B904",   # raise from in except clause (existing pattern throughout codebase)
+    "B025",   # duplicate exception in try-except
+    "E722",   # bare except (used intentionally in binary parsing)
+    "SIM108", # use ternary operator (can reduce readability)
+    "SIM114", # combine if branches using logical or
+    "SIM110", # use any() instead of for loop
+    "UP031",  # use format specifiers instead of percent format
+]
+
+[tool.ruff.lint.per-file-ignores]
+"client_test.py" = ["T20", "E702"]  # allow print and semicolons in test file
+"bydbox_const.py" = ["E501"]  # allow long lines in constants file
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = false
+strict_equality = false
+show_error_codes = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false

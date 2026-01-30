@@ -5,18 +5,11 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.const import Platform
-
-from homeassistant.const import CONF_NAME, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-from .const import (
-    DOMAIN,
-    CONF_UNIT_ID,
-    CONF_BMS_SCAN_INTERVAL,
-    CONF_LOG_SCAN_INTERVAL
-)
 
 from . import hub
+from .const import CONF_BMS_SCAN_INTERVAL, CONF_LOG_SCAN_INTERVAL, CONF_UNIT_ID, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     # Store an instance of the "connecting" class that does the work of speaking
     # with your actual devices.
     entry.runtime_data = hub.Hub(hass = hass, name = name, host = host, port = port, unit_id=unit_id, scan_interval = scan_interval, scan_interval_bms = scan_interval_bms, scan_interval_log=scan_interval_log)
-    
+
     await entry.runtime_data.init_data()
 
     # This creates each HA object for each platform your device requires.
@@ -59,14 +52,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return unload_ok
 
-async def reload_service_handler(service: ServiceCall) -> None:
-    """Remove all user-defined groups and load new ones from config."""
-    conf = None
-    with contextlib.suppress(HomeAssistantError):
-        conf = await async_integration_yaml_config(hass, DOMAIN)
-    if conf is None:
-        return
-    await async_reload_integration_platforms(hass, DOMAIN, PLATFORMS)
-    _async_setup_shared_data(hass)
-    await _async_process_config(hass, conf)    
 

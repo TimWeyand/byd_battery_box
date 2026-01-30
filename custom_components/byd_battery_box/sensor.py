@@ -2,23 +2,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
 )
-from homeassistant.const import CONF_NAME
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.icon import icon_for_battery_level
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import Entity
-from homeassistant.core import callback
+from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import HubConfigEntry
 from .const import (
-    BMU_SENSOR_TYPES,
     BMS_SENSOR_TYPES,
+    BMU_SENSOR_TYPES,
     CONNECTION_SENSOR_TYPES,
     ENTITY_PREFIX,
 )
@@ -69,7 +66,7 @@ async def async_setup_entry(
         entities.append(sensor)
 
     towers = hub.data.get('towers')
-    if not towers is None and towers > 0:
+    if towers is not None and towers > 0:
         for id in range(1,towers +1):
             for sensor_info in BMS_SENSOR_TYPES.values():
                 sensor = BydBoxSensor(
@@ -101,9 +98,9 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
         self._unit_of_measurement = unit
         self._icon = icon
         self._device_info = device_info
-        if not device_class is None:
+        if device_class is not None:
             self._attr_device_class = device_class
-        if not state_class is None:
+        if state_class is not None:
             self._attr_state_class = state_class
         self._attr_entity_category = entity_category
 
@@ -152,7 +149,7 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
         return f"{self._name}"
 
     @property
-    def unique_id(self) -> Optional[str]:
+    def unique_id(self) -> str | None:
         return f"{self._platform_name}_{self._key}"
 
     @property
@@ -208,7 +205,7 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
         return False
 
     @property
-    def device_info(self) -> Optional[Dict[str, Any]]:
+    def device_info(self) -> dict[str, Any] | None:
         return self._device_info
 
 
@@ -224,9 +221,9 @@ class BydBoxConnectionSensor(SensorEntity, RestoreEntity):
         self._unit_of_measurement = unit
         self._icon = icon
         self._device_info = device_info
-        if not device_class is None:
+        if device_class is not None:
             self._attr_device_class = device_class
-        if not state_class is None:
+        if state_class is not None:
             self._attr_state_class = state_class
         self._attr_entity_category = entity_category
 
@@ -247,7 +244,7 @@ class BydBoxConnectionSensor(SensorEntity, RestoreEntity):
         return f"{self._name}"
 
     @property
-    def unique_id(self) -> Optional[str]:
+    def unique_id(self) -> str | None:
         return f"{self._platform_name}_{self._key}"
 
     @property
@@ -273,7 +270,7 @@ class BydBoxConnectionSensor(SensorEntity, RestoreEntity):
         return False
 
     @property
-    def device_info(self) -> Optional[Dict[str, Any]]:
+    def device_info(self) -> dict[str, Any] | None:
         return self._device_info
 
 
