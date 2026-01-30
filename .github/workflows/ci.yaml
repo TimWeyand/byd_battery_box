@@ -123,14 +123,14 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
 
           # Check if tag for the NEW version already exists
-          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-            echo "Tag v$NEW_VERSION already exists - skipping release"
+          if git rev-parse "$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag $NEW_VERSION already exists - skipping release"
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           # Check if tag for the CURRENT version already exists on this exact commit
-          CURRENT_TAG="v$CURRENT_VERSION"
+          CURRENT_TAG="$CURRENT_VERSION"
           if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1; then
             TAG_COMMIT=$(git rev-list -n 1 "$CURRENT_TAG")
             if [ "$TAG_COMMIT" = "${{ github.sha }}" ]; then
@@ -150,11 +150,24 @@ jobs:
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           echo "Last tag: ${LAST_TAG:-none (first release)}"
 
-          if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges | grep -v "chore: bump version" | head -50)
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges "${LAST_TAG}..HEAD" | grep -v "chore: bump version" | head -50)
+          RANGE="HEAD"
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="${LAST_TAG}..HEAD"
           fi
+
+          # Generate changelog with full commit messages
+          COMMITS=""
+          while IFS= read -r hash; do
+            [ -z "$hash" ] && continue
+            subject=$(git log -1 --format="%s" "$hash")
+            # Skip version bump commits
+            echo "$subject" | grep -qE "chore: bump version|\[skip-version\]" && continue
+            body=$(git log -1 --format="%b" "$hash" | sed '/^$/d; /^Co-Authored-By/d; s/^/  /')
+            COMMITS="${COMMITS}- ${subject} (${hash:0:7})"$'\n'
+            if [ -n "$body" ]; then
+              COMMITS="${COMMITS}${body}"$'\n'
+            fi
+          done < <(git log --format="%H" --no-merges "$RANGE" | head -20)
 
           if [ -z "$COMMITS" ]; then
             COMMITS="- Maintenance release"
@@ -210,7 +223,7 @@ jobs:
           git diff --staged --quiet && { echo "No changes to commit"; exit 0; }
 
           git commit -m "chore: bump version to $NEW_VERSION [skip-version]"
-          git tag "v$NEW_VERSION"
+          git tag "$NEW_VERSION"
           git push
           git push --tags
 
@@ -220,6 +233,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NEW_VERSION="${{ steps.check.outputs.new_version }}"
-          gh release create "v$NEW_VERSION" \
-            --title "v$NEW_VERSION" \
+          CURRENT_VERSION="${{ steps.check.outputs.current_version }}"
+          gh release create "$NEW_VERSION" \
+            --title "$NEW_VERSION" \
+            --previous-tag "$CURRENT_VERSION" \
             --notes-file /tmp/release_notes.md

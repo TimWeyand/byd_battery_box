@@ -1,4 +1,9 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/custom-components/hacs)
+[![CI](https://github.com/TimWeyand/byd_battery_box/actions/workflows/ci.yaml/badge.svg)](https://github.com/TimWeyand/byd_battery_box/actions/workflows/ci.yaml)
+[![GitHub Release](https://img.shields.io/github/v/release/TimWeyand/byd_battery_box)](https://github.com/TimWeyand/byd_battery_box/releases/latest)
+[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://hacs.xyz/)
+[![License](https://img.shields.io/github/license/TimWeyand/byd_battery_box)](LICENSE.md)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.9%2B-blue.svg)](https://www.home-assistant.io/)
+[![GitHub Issues](https://img.shields.io/github/issues/TimWeyand/byd_battery_box)](https://github.com/TimWeyand/byd_battery_box/issues)
 
 # byd_battery_box
 Home assistant Custom Component for reading data from BYD Battery Box system series like HVL, HVM, HVS, LVS. This integration uses a local modbus connection.
