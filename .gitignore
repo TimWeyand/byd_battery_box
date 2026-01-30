@@ -3,3 +3,17 @@ __pycache__/**
 **/*.pyc
 .DS_Store
 .codegpt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local / OS
+.env
+Thumbs.db
+*.log
+
+# Claude Code
+.claude/

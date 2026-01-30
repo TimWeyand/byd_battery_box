@@ -1,7 +1,10 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/custom-components/hacs)
 
 # byd_battery_box
-Home assistant Custom Component for reading data from BYD Battery Box system series like HVL, HVM, HVS, LVS. This integration uses a local modbus connection. 
+Home assistant Custom Component for reading data from BYD Battery Box system series like HVL, HVM, HVS, LVS. This integration uses a local modbus connection.
+
+> [!NOTE]
+> This is a fork of [redpomodoro/byd_battery_box](https://github.com/redpomodoro/byd_battery_box). This fork has diverged from the original project and includes additional features, bug fixes, and improvements that are not available upstream.
 
 > [!CAUTION]
 > This is a work in progress project - it is still in early development stage, so there are still breaking changes possible.
@@ -70,6 +73,25 @@ To come!
 | --- | --- |
 To come!
 
+
+### BYD Battery Box Visualization (Lovelace Card)
+
+For a rich, interactive dashboard experience, check out the companion Lovelace card: [BYD Battery Box Visualization](https://github.com/TimWeyand/byd_battery_box_visualization)
+
+![BYD Battery Box Visualization Preview](https://raw.githubusercontent.com/TimWeyand/byd_battery_box_visualization/main/images/preview.png "BYD Battery Box Visualization")
+
+Features:
+- Visualize modules and cells with current, min/max voltages and temperatures
+- Per-cell voltage bars with balancing indicators
+- SOC bar with animated charge/discharge status
+- Support for up to 3 battery towers
+- Toggle between voltage (mV) and temperature view
+- Interactive tooltips on hover/click
+- Install via HACS as a Frontend/Lovelace plugin
+
+[![Open your Home Assistant instance and open this repository in HACS (Frontend/Lovelace).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=TimWeyand&repository=byd_battery_box_visualization&category=frontend)
+
+---
 
 ### Markdown Cards
 
@@ -292,6 +314,8 @@ Temperatures Table
 
 
 # References
-https://github.com/sarnau/BYD-Battery-Box-Infos/blob/main/Read_Modbus.py
-https://github.com/christianh17/ioBroker.bydhvs/blob/master/docs/byd-hexstructure.md
-https://github.com/smarthomeNG/plugins/tree/develop/byd_bat
+- https://github.com/redpomodoro/byd_battery_box - Original project (upstream)
+- https://github.com/TimWeyand/byd_battery_box_visualization - Companion Lovelace visualization card
+- https://github.com/sarnau/BYD-Battery-Box-Infos/blob/main/Read_Modbus.py
+- https://github.com/christianh17/ioBroker.bydhvs/blob/master/docs/byd-hexstructure.md
+- https://github.com/smarthomeNG/plugins/tree/develop/byd_bat
