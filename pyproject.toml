@@ -1,6 +1,6 @@
 [project]
 name = "byd_battery_box"
-version = "0.1.29"
+version = "0.1.30"
 description = "Home Assistant Custom Component for BYD Battery Box"
 requires-python = ">=3.12"
 
