@@ -1,6 +1,6 @@
 {
+    "title": "BYD Battery Box",
     "config": {
-      "title": "BYD Battery Box",
       "step": {
         "user": {
           "title": "Set up BYD Battery Box",

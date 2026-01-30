@@ -1,13 +1,13 @@
 {
   "domain": "byd_battery_box",
   "name": "BYD Battery Box",
-  "codeowners": ["@redpomodoro"],
+  "codeowners": ["@redpomodoro", "@TimWeyand"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/redpomodoro/byd_battery_box/",
+  "documentation": "https://github.com/TimWeyand/byd_battery_box/",
+  "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/redpomodoro/byd_battery_box/issues",
+  "issue_tracker": "https://github.com/TimWeyand/byd_battery_box/issues",
   "requirements": ["pymodbus>=3.11.2"],
-  "version": "0.1.28",
-  "integration_type": "hub"
+  "version": "0.1.28"
 }
