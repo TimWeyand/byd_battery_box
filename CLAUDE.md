@@ -5,7 +5,7 @@
 This is a **Home Assistant Custom Component** for monitoring BYD Battery Box energy storage systems (HVL, HVM, HVS, LVS series) via local **Modbus TCP** connection. It is distributed through **HACS** (Home Assistant Community Store).
 
 - **Domain:** `byd_battery_box`
-- **Current Version:** `0.1.30` (defined in `custom_components/byd_battery_box/manifest.json`)
+- **Current Version:** `0.1.31` (defined in `custom_components/byd_battery_box/manifest.json`)
 - **License:** Apache 2.0
 - **Original Author:** @redpomodoro
 - **Current Maintainer:** @TimWeyand
