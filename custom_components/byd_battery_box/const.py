@@ -71,6 +71,7 @@ BMU_SENSOR_TYPES = {
 BMS_SENSOR_TYPES = {
     "max_c_v": ["Cell voltage max", "max_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
     "min_c_v": ["Cell voltage min", "min_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "V", "mdi:lightning-bolt", None],
+    "delta_c_v": ["Cells voltage delta", "delta_c_v", SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, "mV", "mdi:delta", EntityCategory.DIAGNOSTIC],
     "max_c_v_id": ["Cell voltage max number", "max_c_v_id", None, None, None, None, None],
     "min_c_v_id": ["Cell voltage min number", "min_c_v_id", None, None, None, None, None],
     "max_c_t": ["Cell temperature max", "max_c_t", SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, "°C", "mdi:thermometer", None],
