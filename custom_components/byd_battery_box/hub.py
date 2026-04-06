@@ -113,6 +113,7 @@ class Hub:
             await self._bydclient.init_data(close = close)
             # Start connection health monitoring
             self._bydclient.health_monitor.start_monitoring()
+            self._compute_delta_c_v()
             self.update_entities()
 
     def check_pymodbus_version(self):
@@ -186,6 +187,7 @@ class Hub:
                 if result:
                     self._last_full_update = datetime.now()
                     self._last_update = datetime.now()
+                    self._compute_delta_c_v()
                     self.update_entities()
                     _LOGGER.debug("updated BMS status")
                 else:
@@ -201,6 +203,7 @@ class Hub:
                 return False
             if result:
                 self._last_update = datetime.now()
+                self._compute_delta_c_v()
                 self.update_entities()
                 _LOGGER.debug("updated BMU status")
             else:
@@ -208,6 +211,16 @@ class Hub:
                 return False
 
             return True
+
+    def _compute_delta_c_v(self):
+        """Compute cell voltage delta (max - min) for each BMS tower."""
+        for bms_id in range(1, self._bydclient._bms_qty + 1):
+            max_v = self._bydclient.data.get(f'bms{bms_id}_max_c_v')
+            min_v = self._bydclient.data.get(f'bms{bms_id}_min_c_v')
+            if max_v is not None and min_v is not None:
+                self._bydclient.data[f'bms{bms_id}_delta_c_v'] = round((max_v - min_v) * 1000)
+            else:
+                self._bydclient.data[f'bms{bms_id}_delta_c_v'] = None
 
     def update_entities(self):
         for update_callback in self._entities:
