@@ -116,33 +116,40 @@ class BydBoxClient(ExtModbusClient):
             self._monitor_task = None
 
         async def measure_latency(self) -> float | None:
-            start = time.perf_counter()
-            try:
-                # Quick, low-impact register read for measurement
-                result = await self.client.read_holding_registers(
-                    unit_id=self.client._unit_id,
-                    address=0x0000,  # Basic info register - low impact
-                    count=1
-                )
-                if result:
-                    latency = time.perf_counter() - start
-                    self.last_latency = latency
+            # Skip if client is busy with a data update — health checks
+            # must not queue up behind real work or cause concurrent reads.
+            if self.client.busy:
+                _LOGGER.debug("Health check skipped, client busy")
+                return None
 
-                    # Update rolling average
-                    if self.avg_latency is None:
-                        self.avg_latency = latency
-                    else:
-                        self.avg_latency = (self.avg_latency * 0.8) + (latency * 0.2)
+            async with self.client.ClientBusyLock(self.client):
+                start = time.perf_counter()
+                try:
+                    # Quick, low-impact register read for measurement
+                    result = await self.client.read_holding_registers(
+                        unit_id=self.client._unit_id,
+                        address=0x0000,  # Basic info register - low impact
+                        count=1
+                    )
+                    if result:
+                        latency = time.perf_counter() - start
+                        self.last_latency = latency
 
-                    # Calculate quality score (inverse relationship with latency)
-                    self.connection_quality = max(0.0, min(1.0, 2.0 / (1.0 + latency)))
+                        # Update rolling average
+                        if self.avg_latency is None:
+                            self.avg_latency = latency
+                        else:
+                            self.avg_latency = (self.avg_latency * 0.8) + (latency * 0.2)
 
-                    self.last_success = datetime.now()
-                    self.consecutive_failures = 0
-                    return latency
-            except Exception as e:
-                self.consecutive_failures += 1
-                _LOGGER.debug(f"Latency measurement failed: {e}")
+                        # Calculate quality score (inverse relationship with latency)
+                        self.connection_quality = max(0.0, min(1.0, 2.0 / (1.0 + latency)))
+
+                        self.last_success = datetime.now()
+                        self.consecutive_failures = 0
+                        return latency
+                except Exception as e:
+                    self.consecutive_failures += 1
+                    _LOGGER.debug(f"Latency measurement failed: {e}")
 
             return None
 
