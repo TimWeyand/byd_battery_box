@@ -908,16 +908,30 @@ class BydBoxClient(ExtModbusClient):
             code_desc = self.get_value_from_dict(BMS_LOG_CODES, code, 'Not available')
         return code_desc
 
-    def save_log_entries(self, append=True) -> None:
-        # if append:
-        #     self.save_log_txt_file(self._new_logs, append=True)
-        # else:
-        #     self.save_log_txt_file(self.log)
-        self.log = dict(sorted(self.log.items()))
+    def save_log_entries(self, append=True, retention_days=30) -> None:
+        """Save log entries with configurable retention to prevent unlimited growth."""
+        # Apply retention policy - remove entries older than retention_days
+        cutoff_timestamp = datetime.now().timestamp() - (retention_days * 24 * 60 * 60)
+
+        # Filter logs to only keep entries within retention period
+        filtered_logs = {
+            key: entry for key, entry in self.log.items()
+            if entry['ts'] >= cutoff_timestamp
+        }
+
+        # Log removal statistics
+        removed_count = len(self.log) - len(filtered_logs)
+        if removed_count > 0:
+            _LOGGER.info(f"Log retention: removed {removed_count} entries older than {retention_days} days")
+
+        # Update class log dictionary with filtered entries
+        self.log = dict(sorted(filtered_logs.items()))
+
+        # Save filtered logs to files (preserving exact existing format)
         self.save_log_csv_file()
         self.save_log_json_file()
 
-        _LOGGER.debug(f'Saved {len(self._new_logs)} new log entries. Total: {len(self.log)}')
+        _LOGGER.debug(f'Saved {len(self._new_logs)} new log entries. Total after retention: {len(self.log)}')
         return True
 
     def save_log_json_file(self) -> None:
