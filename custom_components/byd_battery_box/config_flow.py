@@ -68,12 +68,14 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     if data[CONF_LOG_SCAN_INTERVAL] < 120:
         raise LogScanIntervalTooShort
 
+    hub = Hub(hass, data[CONF_NAME], data[CONF_HOST], data[CONF_PORT], data[CONF_UNIT_ID], data[CONF_SCAN_INTERVAL], data[CONF_BMS_SCAN_INTERVAL], data[CONF_LOG_SCAN_INTERVAL])
     try:
-        hub = Hub(hass, data[CONF_NAME], data[CONF_HOST], data[CONF_PORT], data[CONF_UNIT_ID], data[CONF_SCAN_INTERVAL], data[CONF_BMS_SCAN_INTERVAL], data[CONF_LOG_SCAN_INTERVAL])
         await hub.init_data(close=True)
     except Exception as e:
-        # If there is an error, raise an exception to notify HA that there was a
-        # problem. The UI will also show there was a problem
+        # Ensure the Modbus connection is closed on failure.
+        # BYD batteries only allow one concurrent connection,
+        # so a leaked connection blocks all subsequent attempts.
+        await hub.close()
         _LOGGER.error(f"Cannot start hub {e}")
         raise CannotConnect
 
