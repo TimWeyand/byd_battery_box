@@ -2,13 +2,16 @@
 
 """Extended Modbus Class"""
 
+import asyncio
 import logging
 import operator
-from typing import Literal
 import struct
-import asyncio
+from typing import Literal
 
+from pymodbus import ExceptionResponse
 from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.exceptions import ConnectionException, ModbusIOException
+
 try:
     # For pymodbus 3.13.x+
     from pymodbus.pdu.utils import unpack_bitstring
@@ -22,11 +25,8 @@ except ImportError:
             from pymodbus.utilities import unpack_bitstring
         except ImportError as exc:
             raise ImportError("cannot import unpack_bitstring from pymodbus") from exc
-from pymodbus.exceptions import ModbusIOException, ConnectionException
-from pymodbus import ExceptionResponse
 
 _LOGGER = logging.getLogger(__name__)
-
 
 class ExtModbusClient:
     busy = False
