@@ -8,21 +8,25 @@ import operator
 import struct
 from typing import Literal
 
-from pymodbus.client import AsyncModbusTcpClient
-
-try:
-    # For newer pymodbus versions (3.9.x+)
-    from pymodbus.pdu.pdu import unpack_bitstring
-except ImportError:
-    # For older pymodbus versions (3.8.x and below)
-    from pymodbus.utilities import unpack_bitstring
-# from  pymodbus.register_write_message import WriteMultipleRegistersResponse
-
 from pymodbus import ExceptionResponse
+from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException, ModbusIOException
 
-_LOGGER = logging.getLogger(__name__)
+try:
+    # For pymodbus 3.13.x+
+    from pymodbus.pdu.utils import unpack_bitstring
+except ImportError:
+    try:
+        # For pymodbus 3.9.x-3.12.x
+        from pymodbus.pdu.pdu import unpack_bitstring
+    except ImportError:
+        try:
+            # For pymodbus 3.8.x and below
+            from pymodbus.utilities import unpack_bitstring
+        except ImportError as exc:
+            raise ImportError("cannot import unpack_bitstring from pymodbus") from exc
 
+_LOGGER = logging.getLogger(__name__)
 
 class ExtModbusClient:
     busy = False
