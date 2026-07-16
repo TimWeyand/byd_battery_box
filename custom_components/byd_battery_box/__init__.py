@@ -7,6 +7,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from . import hub
 from .const import CONF_BMS_SCAN_INTERVAL, CONF_LOG_SCAN_INTERVAL, CONF_UNIT_ID, DOMAIN
@@ -38,9 +39,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
 
     try:
         await entry.runtime_data.init_data()
-    except Exception:
+    except Exception as err:
+        # The client raises plain Exception for all connectivity failures during
+        # init, so a broad catch is needed to get automatic setup retries.
         await entry.runtime_data.close()
-        raise
+        raise ConfigEntryNotReady(
+            f"Unable to initialize BYD Battery Box at {host}:{port}: {err}"
+        ) from err
 
     # This creates each HA object for each platform your device requires.
     # It's done by calling the `async_setup_entry` function in each platform module.
