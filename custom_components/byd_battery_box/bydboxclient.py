@@ -439,8 +439,8 @@ class BydBoxClient(ExtModbusClient):
         self.data['inverter'] = self._get_inverter_model(model, inverter_id)
         self.data['model'] = model
         self.data['capacity'] = capacity
-        self.data['sensors_t'] = self._cells
-        self.data['cells'] = self._temps
+        self.data['sensors_t'] = self._temps
+        self.data['cells'] = self._cells
 
         return True
 
