@@ -10,7 +10,8 @@
             "port": "Port",
             "unit_id": "Modbus Unit/Slave ID",
             "scan_interval": "Scan Interval in Seconds for the BMU",
-            "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s)"
+            "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s)",
+            "log_scan_interval": "Scan Interval in Seconds for the logs"
           }
         }
       },
@@ -20,26 +21,30 @@
         "invalid_host": "Invalid host address",
         "unknown": "An unknown error occurred",
         "scan_interval_too_short": "Scan interval is too short. Minimum 10 seconds.",
-        "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds."
+        "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds.",
+        "log_scan_interval_too_short": "Log scan interval is too short. Minimum 120 seconds."
       }
     },
     "options": {
       "step": {
         "init": {
-            "title": "Set up BYD Battery Box",
-            "description": "Set options for your BYD Battery Box.",
+            "title": "BYD Battery Box settings",
+            "description": "Address of the BYD BMU and how often Home Assistant reads it. The BMU accepts one connection; the entry reloads with the new values.",
             "data": {
-              "ip_address": "IP Address",
+              "host": "BMU IP address",
               "port": "Port",
-              "unit_id": "Modbus Unit/Slave ID",
-              "scan_interval": "Scan Interval in Seconds for the BMU",
-              "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s)"
+              "scan_interval": "Scan Interval in Seconds for the BMU (minimum 10)",
+              "bms_scan_interval": "Scan Interval in Seconds for BMS Unit(s) (minimum 60)",
+              "log_scan_interval": "Scan Interval in Seconds for the logs (minimum 120)"
             }
         }
       },
       "error": {
+        "invalid_host": "Invalid host address",
+        "invalid_port": "Invalid port number",
         "scan_interval_too_short": "Scan interval is too short. Minimum 10 seconds.",
-        "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds."
+        "bms_scan_interval_too_short": "BMS Scan interval is too short. Minimum 60 seconds.",
+        "log_scan_interval_too_short": "Log scan interval is too short. Minimum 120 seconds."
       }
     }
   }

@@ -7,7 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries, exceptions
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_BMS_SCAN_INTERVAL,
@@ -71,11 +71,14 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     hub = Hub(hass, data[CONF_NAME], data[CONF_HOST], data[CONF_PORT], data[CONF_UNIT_ID], data[CONF_SCAN_INTERVAL], data[CONF_BMS_SCAN_INTERVAL], data[CONF_LOG_SCAN_INTERVAL])
     try:
         await hub.init_data(close=True)
+        # init_data starts the health monitor, which would keep reading (and reconnecting) after this test;
+        # close for good so the entry that is created next can take the BMU's only connection
+        await hub.close(final=True)
     except Exception as e:
         # Ensure the Modbus connection is closed on failure.
         # BYD batteries only allow one concurrent connection,
         # so a leaked connection blocks all subsequent attempts.
-        await hub.close()
+        await hub.close(final=True)
         _LOGGER.error(f"Cannot start hub {e}")
         raise CannotConnect
 
@@ -99,6 +102,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # automatically. This integration uses PUSH, as the hub will notify HA of
     # changes.
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Intervals can be changed after setup."""
+        return OptionsFlowHandler()
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -134,6 +143,37 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Change the BMU address and the scan intervals; the entry reloads with the new values."""
+
+    async def async_step_init(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            if len(user_input[CONF_HOST]) < 3:
+                errors["base"] = "invalid_host"
+            elif not (1 <= user_input[CONF_PORT] <= 65535):
+                errors["base"] = "invalid_port"
+            elif user_input[CONF_SCAN_INTERVAL] < 10:
+                errors["base"] = "scan_interval_too_short"
+            elif user_input[CONF_BMS_SCAN_INTERVAL] < 60:
+                errors["base"] = "bms_scan_interval_too_short"
+            elif user_input[CONF_LOG_SCAN_INTERVAL] < 120:
+                errors["base"] = "log_scan_interval_too_short"
+            else:
+                return self.async_create_entry(title="", data=user_input)
+
+        current = {**self.config_entry.data, **self.config_entry.options}
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=current.get(CONF_HOST, "")): str,
+                vol.Required(CONF_PORT, default=current.get(CONF_PORT, DEFAULT_PORT)): int,
+                vol.Required(CONF_SCAN_INTERVAL, default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): int,
+                vol.Required(CONF_BMS_SCAN_INTERVAL, default=current.get(CONF_BMS_SCAN_INTERVAL, DEFAULT_BMS_SCAN_INTERVAL)): int,
+                vol.Required(CONF_LOG_SCAN_INTERVAL, default=current.get(CONF_LOG_SCAN_INTERVAL, DEFAULT_LOG_SCAN_INTERVAL)): int,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
 class CannotConnect(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect."""

@@ -37,14 +37,19 @@ class ExtModbusClient:
         self._port = port
         self._unit_id = unit_id
         self._client = AsyncModbusTcpClient(host=host, port=port, framer=framer, timeout=timeout)
+        self._closed = False
         _LOGGER.debug(f'client timeout {timeout}')
 
-    def close(self):
-        """Disconnect client."""
+    def close(self, final: bool = False):
+        """Disconnect client. final=True: never connect again (the entry is being unloaded)."""
+        if final:
+            self._closed = True
         self._client.close()
 
     async def connect(self, retries=3):
         """Connect client."""
+        if self._closed:
+            raise Exception(f"Connection to {self._host}:{self._port} is closed for good (entry unloaded)")
         for attempts in range(retries):
             if attempts > 0:
                 _LOGGER.debug(

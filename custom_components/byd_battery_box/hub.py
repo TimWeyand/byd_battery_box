@@ -226,10 +226,10 @@ class Hub:
         for update_callback in self._entities:
             update_callback()
 
-    async def close(self):
-        """Disconnect client."""
+    async def close(self, final: bool = False):
+        """Disconnect client. final=True: the entry is unloading, never reconnect."""
         await self._bydclient.health_monitor.stop_monitoring()
-        self._bydclient.close()
+        self._bydclient.close(final)
         _LOGGER.debug("close hub")
 
     async def test_connection(self) -> bool:

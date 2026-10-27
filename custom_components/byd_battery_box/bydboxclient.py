@@ -47,6 +47,7 @@ class BydBoxClient(ExtModbusClient):
     _bms_qty = 0
     _modules = 0
     _cells = 0 # number of cells per module
+    _temps_x = 0 # temperature sensors per module that are not cell temperatures
     _temps = 0 # number of temp sensors per module
     _bat_type = ''
     _new_logs = {}
@@ -280,7 +281,7 @@ class BydBoxClient(ExtModbusClient):
             if len(self.log) == 0:
                 # skip until logs are available
                 return
-            balancing_total = [0, 0, 0, 0]
+            balancing_total = [0] * (max(self._bms_qty, 3) + 1)
             b_cells_total = {}
             for _k, log in self.log.items():
                 if log['c'] == 17:
@@ -433,6 +434,14 @@ class BydBoxClient(ExtModbusClient):
             capacity_module = specs['capacity']
             self._cells = specs['cells']
             self._temps = specs['sensors_t']
+            self._temps_x = specs.get('sensors_x', 0)
+
+        if model == 'LVL':
+            # Every LVL battery answers as its own BMS with one 16 cell module; the BMU reports them as modules of one tower.
+            self._bms_qty = self._modules
+            self._modules = 1
+            self.data['towers'] = self._bms_qty
+            self.data['modules'] = self._modules
 
         capacity = self._bms_qty * self._modules * capacity_module
 
@@ -468,8 +477,10 @@ class BydBoxClient(ExtModbusClient):
             param_t_v1, param_t_v2 = self.convert_from_registers_int8(regs[14:15])
             output_voltage = round(self._client.convert_from_registers(regs[16:17], data_type = self._client.DATATYPE.UINT16) * 0.01,2)
             # TODO: change to use standard pymodbus function once HA has been upgraded to later version
-            charge_lfte = self.convert_from_registers(regs[17:19], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
-            discharge_lfte = self.convert_from_registers(regs[19:21], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.1
+            # LVL BMUs count lifetime energy in Wh, the other models in 0.1 kWh
+            lfte_scale = 0.001 if self.data.get('model') == 'LVL' else 0.1
+            charge_lfte = self.convert_from_registers(regs[17:19], data_type = self._client.DATATYPE.UINT32, word_order='little') * lfte_scale
+            discharge_lfte = self.convert_from_registers(regs[19:21], data_type = self._client.DATATYPE.UINT32, word_order='little') * lfte_scale
 
             param_t_v = f"{param_t_v1}.{param_t_v2}"
             efficiency = round((discharge_lfte / charge_lfte) * 100.0,1)
@@ -583,7 +594,7 @@ class BydBoxClient(ExtModbusClient):
 
         temp_parts = 0
         if self._temps > 0:
-            temp_parts = round(self._temps/2)
+            temp_parts = (self._temps + self._temps_x + 1) // 2
 
         for m in range(self._modules):
             values = []
@@ -595,8 +606,11 @@ class BydBoxClient(ExtModbusClient):
             values = []
             for i in range(temp_parts):
                 values += self.convert_from_registers_int8(regs_temps[i+m*4:i+m*4+1])
+            values = values[:self._temps + self._temps_x]  # two sensors per register; drop the unused half when the count is odd
+            other_temps = values[self._temps:]
+            values = values[:self._temps]
             all_cell_temps += values
-            cell_temps.append({'m':m+1, 't':values})
+            cell_temps.append({'m':m+1, 't':values, 'x':other_temps} if other_temps else {'m':m+1, 't':values})
 
         # calculate quantity cells balancing
         #balancing_cells = 0

@@ -61,7 +61,7 @@ PHASE_LIST = [ "Single", "Three" ]
 WORKING_AREA = [ "B", "A", "B" ]
 
 MODULE_SPECS = {
-    'LVL': {'capacity': 8.68, 'cells': 0, 'sensors_t': 0},
+    'LVL': {'capacity': 15.36, 'cells': 16, 'sensors_t': 8, 'sensors_x': 3},  # 8 cell + 3 other temperatures per battery
     'LVS': {'capacity': 4, 'cells': 16, 'sensors_t': 8},
     'HVL': {'capacity': 4, 'cells': 0, 'sensors_t': 0},
     'HVM': {'capacity': 2.76, 'cells': 16, 'sensors_t': 8},
