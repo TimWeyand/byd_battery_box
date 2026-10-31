@@ -321,7 +321,7 @@ class BydBoxClient(ExtModbusClient):
                 if ct is None:
                     ct = 0
                 mct.append(ct)
-            r.append({'m': m, 'bct':mct})
+            r.append({'m': m + 1, 'bct':mct})
         return r
 
     def _get_inverter_model(self,model,id) -> str:
