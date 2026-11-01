@@ -13,6 +13,7 @@ from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import HubConfigEntry
+from .bms_parser import PARSER_VERSION
 from .const import (
     BMS_SENSOR_TYPES,
     BMU_SENSOR_TYPES,
@@ -121,10 +122,10 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
                 self._hub.data[self._key] = val
             except Exception:
                 pass
-            # Restore per-cell attribute if present
+            # Only reuse per-cell history produced by the current parser.
             attrs = getattr(last_state, 'attributes', {}) or {}
             cells = attrs.get('cell_voltages')
-            if cells is not None:
+            if cells is not None and attrs.get('parser_version') == PARSER_VERSION:
                 self._hub.data[f'{self._key}_cells'] = cells
 
     async def async_will_remove_from_hass(self) -> None:
@@ -171,22 +172,31 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
     @property
     def extra_state_attributes(self):
         if 'balancing_qty' in self._key:
-            return {'cell_balancing': self._hub.data.get(f'{self._key[:4]}_cell_balancing')}
+            return {
+                'cell_balancing': self._hub.data.get(f'{self._key[:4]}_cell_balancing'),
+                'cells_complete': self._hub.data.get(f'{self._key[:4]}_cells_complete'),
+                'cells_plausible': self._hub.data.get(f'{self._key[:4]}_cells_plausible'),
+            }
         elif 'avg_c_v' in self._key:
             return {
                 'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
                 'cell_voltages_max_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_max_history'),
                 'cell_voltages_min_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_min_history'),
+                'cells_complete': self._hub.data.get(f'{self._key[:4]}_cells_complete'),
+                'cells_plausible': self._hub.data.get(f'{self._key[:4]}_cells_plausible'),
+                'parser_version': PARSER_VERSION,
             }
         elif 'max_history_c_v' in self._key:
             return {
                 'cell_voltages_max_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_max_history'),
                 'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
+                'parser_version': PARSER_VERSION,
             }
         elif 'min_history_c_v' in self._key:
             return {
                 'cell_voltages_min_history': self._hub.data.get(f'{self._key[:4]}_cell_voltages_min_history'),
                 'cell_voltages': self._hub.data.get(f'{self._key[:4]}_cell_voltages'),
+                'parser_version': PARSER_VERSION,
             }
         elif 'avg_c_t' in self._key:
             return {'cell_temps': self._hub.data.get(f'{self._key[:4]}_cell_temps')}
@@ -195,7 +205,10 @@ class BydBoxSensor(SensorEntity, RestoreEntity):
         elif 'b_total' in self._key:
             return {'total_cells': self._hub.data.get(f'{self._key[:4]}_b_cells_total')}
         elif 'max_history_cell_voltage' in self._key or 'min_history_cell_voltage' in self._key:
-            return {'cell_voltages': self._hub.data.get(f'{self._key}_cells')}
+            return {
+                'cell_voltages': self._hub.data.get(f'{self._key}_cells'),
+                'parser_version': PARSER_VERSION,
+            }
 
         return None
 

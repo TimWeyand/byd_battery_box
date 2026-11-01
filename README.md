@@ -44,6 +44,10 @@ The key BMU Status data will by default refreshed 30 seconds.
 
 Detailed BMS data will be refreshed by default every 10 minutes.
 
+The BMS cells average voltage sensor exposes `cells_complete`, `cells_plausible` and `parser_version` attributes. `cells_complete` is false if the second diagnostic round needed for cells 129-160 fails; only received cells are shown. `cells_plausible` compares the reported and computed minimum/maximum with a 10 mV tolerance. It is null for incomplete readings; false produces a warning while keeping the received data. The cells balancing sensor also exposes `cells_complete` and `cells_plausible`.
+
+After updating to the corrected cell mapping, per-cell voltage history is reset once. History sensors restore per-cell values only when `parser_version` matches, so older values with shifted module positions are not reused.
+
 # Log data
 The log data is by default updated every 10 minutes. Log data is stored in /config/custom_components/byd_battery_box/logs folder. The integration uses the json file for storage and for convenience a CSV file is being stored as well.
 
