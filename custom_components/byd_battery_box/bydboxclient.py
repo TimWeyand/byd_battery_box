@@ -11,6 +11,7 @@ import os
 import time
 from datetime import datetime
 
+from .bms_parser import PARSER_VERSION, parse_bms_status, unpack_blocks, update_cell_history
 from .bydbox_const import (
     APPLICATION_LIST,
     BMS_ERRORS,
@@ -38,6 +39,11 @@ from .bydbox_const import (
 from .extmodbusclient import ExtModbusClient
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class BmsNotReady(Exception):
+    """The BMS has not prepared a diagnostic response yet."""
+
 
 class BydBoxClient(ExtModbusClient):
     """Async Modbus Client for BYD Battery Box"""
@@ -247,6 +253,9 @@ class BydBoxClient(ExtModbusClient):
                     await asyncio.sleep(.2)
                 try:
                     result = await self.update_bms_status_data(bms_id)
+                except BmsNotReady as err:
+                    _LOGGER.warning("BMS status data not ready: %s", err)
+                    return False
                 except Exception:
                     _LOGGER.error(f"Error reading BMS status data {bms_id}", exc_info=True)
                     return False
@@ -494,51 +503,49 @@ class BydBoxClient(ExtModbusClient):
 
             return True
 
-    async def update_bms_status_data(self, bms_id) -> bool:
-        """start reading status data"""
-
+    async def _read_bms_status_round(self, bms_id, block_count):
+        """Read a diagnostic round. Caller holds the existing ClientBusyLock."""
         await self.write_registers(unit_id=self._unit_id, address=0x0550, payload=[bms_id,0x8100])
+        if not await self._wait_for_response(address=0x0551):
+            raise BmsNotReady(f"BMS {bms_id} status not ready")
+        blocks = []
+        for _ in range(block_count):
+            block = await self.get_registers(address=0x0558, count=65)
+            if block is None:
+                raise ValueError(f"BMS {bms_id} status block missing")
+            # Validate each block before concatenation; short blocks must not
+            # move subsequent cells or a length word into a voltage slot.
+            unpack_blocks([block], 1)
+            blocks.append(block)
+        return blocks
 
-        response_reg = await self._wait_for_response(address = 0x0551)
-        if not response_reg:
-            return None
+    async def update_bms_status_data(self, bms_id) -> bool:
+        """Read status while the caller holds ClientBusyLock across both rounds."""
+        blocks = await self._read_bms_status_round(bms_id, 4)
+        round2_blocks = None
+        if self._modules * self._cells > 128:
+            try:
+                await self.write_registers(unit_id=self._unit_id, address=0x0100, payload=[0x4445, 0x4255, 0x4700])
+                round2_blocks = await self._read_bms_status_round(bms_id, 2)
+            except Exception as err:
+                _LOGGER.warning("BMS %s round 2 failed; using incomplete round-1 cells: %s", bms_id, err)
+        parsed = parse_bms_status(blocks, self._modules, self._cells, self._temps, round2_blocks)
+        if parsed.round2_error and round2_blocks is not None:
+            _LOGGER.warning("BMS %s round 2 invalid; using incomplete round-1 cells: %s", bms_id, parsed.round2_error)
+        if parsed.plausible is False and (
+            self.data.get(f'bms{bms_id}_cells_plausible') is not False
+            or self.data.get(f'bms{bms_id}_cells_plausibility_reason') != parsed.plausibility_reason
+        ):
+            _LOGGER.warning("BMS %s cell voltages implausible: %s", bms_id, parsed.plausibility_reason)
+        regs = [word for block in blocks for word in block]
 
-        regs = []
-        for i in range(4):
-            new_regs = await self.get_registers(address=0x0558, count=65)
-            if new_regs is None:
-                _LOGGER.error(f"Failed reading BMS {bms_id} status part {i}", exc_info=True)
-                return False
-            else:
-                regs += new_regs
-
-        if len(regs) != 260:
-            _LOGGER.error(f"unexpected number of BMS {bms_id} status regs: {len(regs)}")
-            return False
-
-        # skip 1st register with length
-        max_voltage = round(self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.INT16) * 0.001,3)
-        if max_voltage > 5:
-            _LOGGER.error(f"BMS {bms_id} unexpected max voltage {max_voltage}", exc_info=True)
-            return False
-        _ = round(self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.INT16) * 0.001,3)  # min_voltage - parsed for register completeness
-        max_voltage_cell_module, min_voltage_cell_module = self.convert_from_registers_int8(regs[3:4])
+        max_voltage_cell_module, min_voltage_cell_module = parsed.reported_max_id, parsed.reported_min_id
         max_temp = self._client.convert_from_registers(regs[4:5], data_type = self._client.DATATYPE.INT16)
         min_temp = self._client.convert_from_registers(regs[5:6], data_type = self._client.DATATYPE.INT16)
         max_temp_cell_module, min_temp_cell_module = self.convert_from_registers_int8(regs[6:7])
 
-        cell_balancing = []
-        balancing_cells = 0
-        for m in range(self._modules):
-            flags = self._client.convert_from_registers(regs[7+m:7+m+1], data_type = self._client.DATATYPE.UINT16)
-            bl = []
-            for bit in range(16):
-                #b = flags & (1>>bit)
-                b = flags >> bit & 1
-                #_LOGGER.debug(f'bit {b} {flags} {bit} {m}')
-                balancing_cells += b
-                bl.append(b)
-            cell_balancing.append({'m':m+1, 'b':bl})
+        cell_balancing = parsed.cell_balancing
+        balancing_cells = sum(sum(module['b']) for module in cell_balancing)
 
         # TODO: change to use standard pymodbus function once HA has been upgraded to later version
         charge_lfte = self.convert_from_registers(regs[15:17], data_type = self._client.DATATYPE.UINT32, word_order='little') * 0.001
@@ -572,37 +579,10 @@ class BydBoxClient(ExtModbusClient):
             _LOGGER.debug(f'bms {bms_id} reg 44-48: {regs[44:48]} [30840, 30840, 270, 270]')
 
         errors = self._client.convert_from_registers(regs[48:49], data_type = self._client.DATATYPE.UINT16)
-        all_cell_voltages = []
-        cell_voltages= [] # list of dict
-
-        regs_voltages = regs[49:65] + regs[66:130] + regs[131:180]
-        regs_temps = regs[180:195] + regs[196:213]
-
-        all_cell_temps = []
-        cell_temps = [] # list of dict
-
-        temp_parts = 0
-        if self._temps > 0:
-            temp_parts = round(self._temps/2)
-
-        for m in range(self._modules):
-            values = []
-            for i in range(self._cells):
-                 voltage = self._client.convert_from_registers(regs_voltages[i+m*16:i+m*16+1], data_type = self._client.DATATYPE.INT16)
-                 values.append(voltage)
-            all_cell_voltages += values
-            cell_voltages.append({'m':m+1, 'v':values})
-            values = []
-            for i in range(temp_parts):
-                values += self.convert_from_registers_int8(regs_temps[i+m*4:i+m*4+1])
-            all_cell_temps += values
-            cell_temps.append({'m':m+1, 't':values})
-
-        # calculate quantity cells balancing
-        #balancing_cells = 0
-        #for cell in cell_flags:
-        #   if cell['f'] & 1 == 1:
-        #      balancing_cells += 1
+        all_cell_voltages = parsed.cells_mv
+        cell_voltages = parsed.cell_voltages
+        cell_temps = parsed.cell_temps
+        all_cell_temps = [temp for module in cell_temps for temp in module['t']]
 
         efficiency = round((discharge_lfte / charge_lfte) * 100.0, 1)
 
@@ -621,6 +601,10 @@ class BydBoxClient(ExtModbusClient):
         self.data[f'bms{bms_id}_min_c_v'] = calc_min_c_v
         self.data[f'bms{bms_id}_max_c_v_id'] = max_voltage_cell_module
         self.data[f'bms{bms_id}_min_c_v_id'] = min_voltage_cell_module
+        self.data[f'bms{bms_id}_cells_complete'] = parsed.complete
+        self.data[f'bms{bms_id}_cells_plausible'] = parsed.plausible
+        self.data[f'bms{bms_id}_cells_plausibility_reason'] = parsed.plausibility_reason
+        self.data[f'bms{bms_id}_parser_version'] = PARSER_VERSION
         self.data[f'bms{bms_id}_max_c_t'] = max_temp
         self.data[f'bms{bms_id}_min_c_t'] = min_temp
         self.data[f'bms{bms_id}_max_c_t_id'] = max_temp_cell_module
@@ -656,62 +640,13 @@ class BydBoxClient(ExtModbusClient):
             self.data[max_key] = calc_max_c_v
             self.data[min_key] = calc_min_c_v
 
-        # Per-cell history (mV): maintain element-wise max/min for each cell across updates
-        max_hist_key = f'bms{bms_id}_cell_voltages_max_history'
-        min_hist_key = f'bms{bms_id}_cell_voltages_min_history'
-        prev_max_hist = self.data.get(max_hist_key)
-        prev_min_hist = self.data.get(min_hist_key)
-        def same_shape(a, b):
-            try:
-                if a is None or b is None:
-                    return False
-                if len(a) != len(b):
-                    return False
-                for i in range(len(a)):
-                    if a[i].get('m') != b[i].get('m'):
-                        return False
-                    va = a[i].get('v') or []
-                    vb = b[i].get('v') or []
-                    if len(va) != len(vb):
-                        return False
-                return True
-            except Exception:
-                return False
-        # initialize if first time or shape mismatch
-        if not same_shape(prev_max_hist, cell_voltages) or not same_shape(prev_min_hist, cell_voltages):
-            self.data[max_hist_key] = json.loads(json.dumps(cell_voltages))
-            self.data[min_hist_key] = json.loads(json.dumps(cell_voltages))
-        else:
-            # update histories element-wise
-            try:
-                new_max_hist = []
-                new_min_hist = []
-                for idx, mod in enumerate(cell_voltages):
-                    cur_vals = mod.get('v') or []
-                    pm = prev_max_hist[idx].get('v') or []
-                    pn = prev_min_hist[idx].get('v') or []
-                    max_vals = []
-                    min_vals = []
-                    for j in range(len(cur_vals)):
-                        v = cur_vals[j]
-                        max_prev = pm[j]
-                        min_prev = pn[j]
-                        max_vals.append(max(v, max_prev))
-                        min_vals.append(min(v, min_prev))
-                    new_max_hist.append({'m': mod.get('m'), 'v': max_vals})
-                    new_min_hist.append({'m': mod.get('m'), 'v': min_vals})
-                self.data[max_hist_key] = new_max_hist
-                self.data[min_hist_key] = new_min_hist
-            except Exception:
-                # fallback to reinit on any unexpected shape/value issues
-                self.data[max_hist_key] = json.loads(json.dumps(cell_voltages))
-                self.data[min_hist_key] = json.loads(json.dumps(cell_voltages))
+        # Missing round-2 cells must not erase history or break recovery.
+        for suffix, maximum in (('max', True), ('min', False)):
+            key = f'bms{bms_id}_cell_voltages_{suffix}_history'
+            self.data[key] = update_cell_history(self.data.get(key), cell_voltages, maximum)
 
         # Update history of per-cell min/max voltages (based on current cell_voltages in mV)
         # Initialize structures on first run to current values
-        def clone_cells(src):
-            return [{'m': item['m'], 'v': list(item['v'])} for item in src]
-
         # Flatten helper to compute overall min/max state values in V
         def flatten_values(cells):
             vals = []
@@ -724,21 +659,8 @@ class BydBoxClient(ExtModbusClient):
         max_hist_key = f'bms{bms_id}_max_history_cell_voltage'
         min_hist_key = f'bms{bms_id}_min_history_cell_voltage'
 
-        if max_hist_key_cells not in self.data or not isinstance(self.data.get(max_hist_key_cells), list):
-            self.data[max_hist_key_cells] = clone_cells(cell_voltages)
-        if min_hist_key_cells not in self.data or not isinstance(self.data.get(min_hist_key_cells), list):
-            self.data[min_hist_key_cells] = clone_cells(cell_voltages)
-
-        # Update per-cell
-        for mi, module in enumerate(cell_voltages):
-            cur_vals = module['v']
-            max_vals = self.data[max_hist_key_cells][mi]['v']
-            min_vals = self.data[min_hist_key_cells][mi]['v']
-            for ci, mv in enumerate(cur_vals):
-                if mv > max_vals[ci]:
-                    max_vals[ci] = mv
-                if mv < min_vals[ci]:
-                    min_vals[ci] = mv
+        self.data[max_hist_key_cells] = update_cell_history(self.data.get(max_hist_key_cells), cell_voltages, True)
+        self.data[min_hist_key_cells] = update_cell_history(self.data.get(min_hist_key_cells), cell_voltages, False)
 
         # Compute sensor state values (V)
         max_mv = max(flatten_values(self.data[max_hist_key_cells])) if self.data[max_hist_key_cells] else None

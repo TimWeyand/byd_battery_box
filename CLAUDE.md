@@ -34,6 +34,7 @@ byd_battery_box/
 │   ├── sensor.py                        # Sensor entity definitions
 │   ├── button.py                        # Button entity definitions (log history, reset)
 │   ├── bydboxclient.py                  # Core Modbus client: data reading & decoding
+│   ├── bms_parser.py                    # Pure BMS block parser and per-cell history updates
 │   ├── extmodbusclient.py               # Base Modbus TCP client (pymodbus wrapper)
 │   ├── bydbox_const.py                  # Hardware constants, error/log code decoders
 │   ├── manifest.json                    # HA integration metadata (version, requirements)
@@ -43,7 +44,8 @@ byd_battery_box/
 ├── .github/workflows/
 │   └── ci.yaml                          # All CI: lint, syntax, HACS, hassfest, mypy, version bump & release
 ├── images/                              # README screenshots (BMU, BMS, cells, balancing)
-├── pyproject.toml                       # ruff + mypy configuration
+├── tests/                               # Synthetic parser, mocked client and sensor tests
+├── pyproject.toml                       # pytest, ruff + mypy configuration
 ├── hacs.json                            # HACS distribution config
 ├── README.md                            # User-facing documentation
 ├── LICENSE.md                           # Apache 2.0
@@ -172,6 +174,9 @@ This repo is a fork of `redpomodoro/byd_battery_box`. GitHub disables Actions on
 ### Running Checks Locally
 
 ```bash
+# Synthetic and mocked tests (no battery connection)
+python -m pytest -q
+
 # Lint
 pip install ruff
 ruff check custom_components/
@@ -202,7 +207,7 @@ The `logs/` directory is created at runtime. Log entries contain timestamp, unit
 
 - ~~`config_flow.py:123-126` has a bug~~ — **FIXED**: `InvalidPort` and `InvalidHost` exception handlers now have correct error keys
 - ~~README sensor tables are empty ("To come!")~~ — **FIXED**: All sensor tables populated
-- `client_test.py` is minimal, no comprehensive test suite exists
+- `tests/` covers BMS cell/temperature/balancing mapping, partial reads, validity, plausibility and history restore; `client_test.py` is a separate manual client script
 - `bydboxclient.py` — `get_log_list()` dict key renamed from duplicate `'data'` to `'hexdata'` for raw hex data
 
 ### Concurrency Safety
